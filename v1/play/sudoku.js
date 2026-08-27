@@ -202,16 +202,16 @@ export function mountSudoku(puzzle, root) {
 
   grid.addEventListener('keydown', (event) => {
     const key = event.key;
-    const moves = {
-      ArrowUp: -N, ArrowDown: N, ArrowLeft: -1, ArrowRight: 1,
-      w: -N, s: N, a: -1, d: 1,
-    };
+    // Arrows only. WASD aliases used to be here, but with a word puzzle on the
+    // same page people type letters constantly, and having S jump the cursor
+    // (or P silently flip notes mode) is a trap rather than a shortcut.
+    const moves = { ArrowUp: -N, ArrowDown: N, ArrowLeft: -1, ArrowRight: 1 };
     if (key in moves) {
       event.preventDefault();
       let next = cursor + moves[key];
       // Don't wrap across row edges when moving horizontally.
-      if ((key === 'ArrowLeft' || key === 'a') && cursor % N === 0) next = cursor;
-      if ((key === 'ArrowRight' || key === 'd') && cursor % N === N - 1) next = cursor;
+      if (key === 'ArrowLeft' && cursor % N === 0) next = cursor;
+      if (key === 'ArrowRight' && cursor % N === N - 1) next = cursor;
       if (next < 0 || next > 80) next = cursor;
       focusCell(next);
       return;
@@ -224,12 +224,10 @@ export function mountSudoku(puzzle, root) {
     if (key === 'Backspace' || key === 'Delete' || key === '0') {
       event.preventDefault();
       erase();
-      return;
     }
-    if (key === 'p' || key === 'P') {
-      event.preventDefault();
-      setPencil(!pencil);
-    }
+    // No letter shortcuts here on purpose. Letters belong to the word puzzle,
+    // which listens on the document; a P shortcut for notes would silently
+    // flip modes whenever someone typed a word with a P in it.
   });
 
   /* ---------- keypad, pencil toggle, controls ---------- */
@@ -337,7 +335,7 @@ export function mountSudoku(puzzle, root) {
     status.node,
     el('p', {
       class: 'pz-hint',
-      text: 'Arrow keys to move, 1–9 to enter, P for notes.',
+      text: 'Arrow keys to move, 1–9 to enter. Use the Notes button for pencil marks.',
     }),
   );
 

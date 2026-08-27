@@ -18,11 +18,13 @@ import * as sudoku from './generators/sudoku.js';
 import * as shikaku from './generators/shikaku.js';
 import * as slitherlink from './generators/slitherlink.js';
 import * as wordsearch from './generators/wordsearch.js';
+import * as wordle from './generators/wordle.js';
 
 export { Rng, rngForDate, dateKey };
 export { edgeSegments } from './generators/slitherlink.js';
+export { scoreGuess, keyboardState } from './generators/wordle.js';
 
-const REGISTRY = { sudoku, shikaku, slitherlink, wordsearch };
+const REGISTRY = { sudoku, shikaku, slitherlink, wordsearch, wordle };
 
 /** Metadata for every generator: type, name, blurb, difficulties. */
 export const manifest = Object.values(REGISTRY).map((m) => m.meta);
@@ -64,6 +66,8 @@ function rotate(list, dk) {
  * @param {object} [opts]
  * @param {object} [opts.vocab] Parsed data/vocab.json, for the word search.
  *   Omit it and the word search is skipped.
+ * @param {string[]|object} [opts.words5] Parsed data/words5.json (or a bare
+ *   array), for the word guess. Omit it and the word guess is skipped.
  * @param {string} [opts.unit] Force a vocabulary unit instead of rotating.
  * @param {object} [opts.difficulty] Per-type difficulty overrides,
  *   e.g. `{ sudoku: 'hard' }`.
@@ -109,6 +113,21 @@ export function buildDailySet(dk, opts = {}) {
         }),
         dk,
         `${dk}/wordsearch`,
+      ),
+    );
+  }
+
+  if (opts.words5) {
+    const pool = Array.isArray(opts.words5) ? opts.words5 : opts.words5.words;
+    puzzles.push(
+      stamp(
+        generate('wordle', base.fork('wordle'), {
+          words: pool,
+          date: dk,
+          difficulty: diff.wordle ?? ramp,
+        }),
+        dk,
+        `${dk}/wordle`,
       ),
     );
   }

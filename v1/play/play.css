@@ -57,6 +57,19 @@
 .pz-status-warn { color: var(--pz-flag); }
 .pz-status-done { color: var(--pz-accent); font-weight: 700; }
 
+/* Shown instead of a board when a puzzle has no static form (the word guess). */
+.pz-nojs {
+  margin: 0;
+  padding: 1.1rem 1.25rem;
+  max-width: 30rem;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--ink-soft, #55535f);
+  background: var(--paper-deep, #e3e5ea);
+  border-left: 3px solid var(--rule, #b9bcc6);
+}
+
 .pz-hint {
   margin: 0.4rem 0 0;
   font-family: var(--pz-mono);
@@ -264,6 +277,74 @@
 .pz-word { break-inside: avoid; padding: 0.1rem 0; color: var(--pz-ink); }
 .pz-word-found { color: var(--pz-rule); text-decoration: line-through; }
 
+/* ---------- word guess ---------- */
+
+.pz-wordle {
+  display: grid;
+  gap: 0.3rem;
+  max-width: 20rem;
+  margin: 0;
+}
+
+.pz-wordle-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.3rem; }
+
+.pz-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  font-family: var(--pz-mono);
+  font-size: clamp(1.1rem, 6vw, 1.6rem);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--pz-ink);
+  border: 2px solid var(--pz-rule);
+  border-radius: 2px;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.pz-tile-filled { border-color: var(--pz-soft); }
+
+/* Deliberately not the usual green/yellow/grey: this page is printed in one
+   accent ink, so 'correct' is the accent and 'present' is a paler wash of it.
+   Shape and letter position still carry the meaning if colour is missed. */
+.pz-tile-correct { color: var(--pz-paper); background: var(--pz-accent); border-color: var(--pz-accent); }
+.pz-tile-present { color: var(--pz-ink); background: var(--pz-accent-pale); border-color: var(--pz-accent-pale); }
+.pz-tile-absent { color: var(--pz-paper); background: var(--pz-soft); border-color: var(--pz-soft); }
+
+@keyframes pz-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+.pz-shake { animation: pz-shake 260ms ease; }
+
+.pz-kb { display: grid; gap: 0.3rem; max-width: 26rem; margin-top: 1.1rem; }
+.pz-kb-row { display: flex; gap: 0.25rem; justify-content: center; }
+
+.pz-kb-key {
+  appearance: none;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.75rem 0;
+  font-family: var(--pz-mono);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  color: var(--pz-ink);
+  background: var(--pz-paper-deep);
+  border: 1px solid var(--pz-rule);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.pz-kb-wide { flex: 1.6 1 0; font-size: 0.66rem; letter-spacing: 0.06em; }
+.pz-kb-key:hover { border-color: var(--pz-accent); }
+
+.pz-kb-correct { color: var(--pz-paper); background: var(--pz-accent); border-color: var(--pz-accent); }
+.pz-kb-present { color: var(--pz-ink); background: var(--pz-accent-pale); border-color: var(--pz-accent-pale); }
+.pz-kb-absent { color: var(--pz-paper); background: var(--pz-soft); border-color: var(--pz-soft); opacity: 0.65; }
+
 /* ---------- fallback swap ---------- */
 
 /* The static SVG stays in the DOM until its interactive replacement mounts. */
@@ -273,6 +354,10 @@
 /* ---------- print ---------- */
 
 @media print {
+  /* The word guess has nothing to print: the board is empty until someone
+     plays, and the answer must not appear on a handout. */
+  [data-sheet="wordle"] { display: none; }
+
   .pz-controls,
   .pz-keypad,
   .pz-hint,

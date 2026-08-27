@@ -13,15 +13,17 @@ import { mountSudoku } from './sudoku.js';
 import { mountShikaku } from './shikaku.js';
 import { mountSlitherlink } from './slitherlink.js';
 import { mountWordsearch } from './wordsearch.js';
+import { mountWordle } from './wordle.js';
 
 const MOUNTS = {
   sudoku: mountSudoku,
   shikaku: mountShikaku,
   slitherlink: mountSlitherlink,
   wordsearch: mountWordsearch,
+  wordle: mountWordle,
 };
 
-export { mountSudoku, mountShikaku, mountSlitherlink, mountWordsearch };
+export { mountSudoku, mountShikaku, mountSlitherlink, mountWordsearch, mountWordle };
 
 /** Mount one puzzle into an element, replacing whatever is there. */
 export function mount(puzzle, target) {
