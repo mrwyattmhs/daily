@@ -1,6 +1,6 @@
 {
   "date": "2026-08-29",
-  "generatedAt": "2026-08-27T13:17:07.523Z",
+  "generatedAt": "2026-08-27T18:08:49.700Z",
   "version": "v1",
   "puzzles": [
     {
@@ -1084,6 +1084,18 @@
       },
       "date": "2026-08-29",
       "seed": "2026-08-29/wordsearch"
+    },
+    {
+      "type": "wordle",
+      "difficulty": "medium",
+      "length": 5,
+      "maxGuesses": 6,
+      "poolSize": 166,
+      "solution": {
+        "answer": "POWER"
+      },
+      "date": "2026-08-29",
+      "seed": "2026-08-29/wordle"
     }
   ]
 }

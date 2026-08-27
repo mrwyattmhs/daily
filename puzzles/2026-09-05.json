@@ -1,6 +1,6 @@
 {
   "date": "2026-09-05",
-  "generatedAt": "2026-08-27T13:17:08.045Z",
+  "generatedAt": "2026-08-27T18:08:50.079Z",
   "version": "v1",
   "puzzles": [
     {
@@ -975,6 +975,18 @@
       },
       "date": "2026-09-05",
       "seed": "2026-09-05/wordsearch"
+    },
+    {
+      "type": "wordle",
+      "difficulty": "medium",
+      "length": 5,
+      "maxGuesses": 6,
+      "poolSize": 166,
+      "solution": {
+        "answer": "TWICE"
+      },
+      "date": "2026-09-05",
+      "seed": "2026-09-05/wordle"
     }
   ]
 }

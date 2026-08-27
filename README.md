@@ -3,11 +3,12 @@
 Deterministic math puzzle generators, plus a page that rebuilds itself every
 morning.
 
-Four puzzle types: **sudoku**, **rectangles** (shikaku), **loop**
-(slitherlink), and a **word search** drawn from math vocabulary. Every puzzle is
-checked to have exactly one solution before it is published.
+Five puzzle types: **sudoku**, **rectangles** (shikaku), **loop**
+(slitherlink), a **word search** drawn from math vocabulary, and a daily
+**word guess**. The first four are checked to have exactly one solution before
+they are published.
 
-All four are playable in the browser, on desktop and touch, with progress saved
+All five are playable in the browser, on desktop and touch, with progress saved
 locally. The page also ships a static version of every puzzle, so it still
 prints and still works with JavaScript off.
 
@@ -106,10 +107,31 @@ Controls per puzzle:
 | Rectangles | Drag across cells to draw a rectangle; tap one to remove it. The preview is colour-coded before you commit. |
 | Loop | Tap near an edge to cycle line, cross, blank. Right-click or `X` goes straight to a cross. |
 | Word search | Drag from the first letter to the last. The selection snaps to the nearest of the eight directions. |
+| Word guess | Type or tap five letters, Enter to submit, six tries. Any five letters are accepted — there is no dictionary check. |
 
-Each has **Check**, **Reveal** and **Clear**. Progress is written to
+The first four have **Check**, **Reveal** and **Clear**. The word guess has
+**Give up**, **Clear** and **Copy result** instead: it is the only puzzle that
+can be *lost*, so there is nothing to check mid-solve. Progress is written to
 localStorage keyed by date and puzzle, and is discarded automatically if the
 puzzle for that date changes.
+
+### Keyboard sharing
+
+Five puzzles share one page, so physical keys are split by type rather than by
+focus:
+
+| Keys | Go to |
+| --- | --- |
+| Letters | the word guess, always — nothing else uses them |
+| Digits `1`–`9`, `0` | the sudoku, always |
+| Arrows | whichever board has focus |
+| Enter, Backspace | whichever board has focus; the word guess if none does |
+
+Claiming letters unconditionally is deliberate. Requiring focus meant that
+clicking the sudoku, scrolling to the word guess and typing did nothing at all,
+with no indication why. For the same reason the sudoku has no letter shortcuts:
+a `P`-for-notes binding silently flipped modes whenever someone typed a word
+containing a P.
 
 ### Static renderers
 
@@ -141,7 +163,13 @@ different, so rendering stays per-type.
 { type: 'shikaku',     clues: [{r, c, value}],        solution: [{r0, c0, h, w, value}] }
 { type: 'slitherlink', clues: [rows*cols, -1 = none], solution: { edges: [...], interior: [...] } }
 { type: 'wordsearch',  grid: [rows*cols chars],       solution: { placements: [...] } }
+{ type: 'wordle',      length: 5, maxGuesses: 6,      solution: { answer: 'SLOPE' } }
 ```
+
+The word guess ships its answer to the browser, because guesses are scored
+offline. Anyone who opens the page source can read it. That is the same trade
+the other four make (their solutions are in the payload too), but here it
+actually spoils the puzzle — worth knowing before you treat it as a contest.
 
 All four also carry `date`, `seed`, `difficulty`, and (except sudoku) `rows`
 and `cols`. For slitherlink, `interior` is usually easier to render than
@@ -189,6 +217,22 @@ model** — it would cost tokens on every build, and a model reformatting a grid
 could only ever make it worse. If the call fails or the key is missing, the
 build falls back to static copy rather than failing.
 
+## Word lists
+
+`v1/data/words5.json` is the answer pool for the word guess: 808 common
+five-letter words, about 2.2 years of daily puzzles. The build validates every
+entry and fails loudly rather than shipping a broken one.
+
+Answers are drawn by walking a fixed shuffle of the pool, so the whole list is
+used before anything repeats. The shuffle seed is a constant on purpose —
+seeding it from the date gives a fresh permutation every day, which is really
+random sampling, and answers started repeating within ten days. Changing
+`ORDER_SEED` in `v1/generators/wordle.js` reshuffles all future answers.
+
+Because the pool is split by difficulty and difficulty follows the school week,
+a repeat becomes possible after roughly the size of the smallest bucket
+(currently 166 days). Add words to lengthen that.
+
 ## Vocabulary
 
 `v1/data/vocab.json` holds ten units of math terms. The daily build rotates
@@ -213,6 +257,10 @@ above it.
 | `v1/render/` | Static SVG for print and no-JS. | generator output |
 | `v1/play/` | Interactive boards. | generator output |
 
+The word guess is the one puzzle with no static form — its board is empty until
+someone plays and printing the answer would defeat it — so it shows a short
+notice instead of an SVG and is excluded from print entirely.
+
 Adding interactivity required no change to any generator, which is what the
 data-only contract was for.
 
@@ -221,8 +269,17 @@ data-only contract was for.
 `npm test` validates every generator by re-deriving each answer independently of
 the code that produced it: sudoku uniqueness via a plain depth-first counter,
 shikaku tiling and clue-to-rectangle correspondence, slitherlink loops rebuilt
-from the interior mask and walked to confirm there's exactly one, and every word
-search placement located in the grid.
+from the interior mask and walked to confirm there's exactly one, every word
+search placement located in the grid, and word-guess scoring cross-checked
+against a second implementation written from the rule.
+
+`tests/wordle-scoring.js` is the focused check on guess scoring, which is the
+one piece of logic here that is easy to get subtly wrong. Twelve hand-worked
+repeated-letter cases plus 200,000 random pairs cross-checked against an
+independent reference. The naive rule — green on a match, else yellow if the
+letter appears anywhere — is wrong whenever a letter repeats: `SPEED` guessed
+against `ERASE` must score `Y.YY.`, and `EERIE` against `SPEED` must leave the
+third E blank.
 
 `tests/slitherlink-exhaustive.js` is the strong check on the loop solver: it
 enumerates all 2^(rows·cols) states and compares against the solver's

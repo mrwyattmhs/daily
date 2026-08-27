@@ -1,6 +1,6 @@
 {
   "date": "2026-09-02",
-  "generatedAt": "2026-08-27T13:17:07.806Z",
+  "generatedAt": "2026-08-27T18:08:49.930Z",
   "version": "v1",
   "puzzles": [
     {
@@ -1033,6 +1033,18 @@
       },
       "date": "2026-09-02",
       "seed": "2026-09-02/wordsearch"
+    },
+    {
+      "type": "wordle",
+      "difficulty": "medium",
+      "length": 5,
+      "maxGuesses": 6,
+      "poolSize": 166,
+      "solution": {
+        "answer": "WAGON"
+      },
+      "date": "2026-09-02",
+      "seed": "2026-09-02/wordle"
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "date": "2026-08-30",
-  "generatedAt": "2026-08-27T13:17:07.638Z",
+  "generatedAt": "2026-08-27T18:08:49.803Z",
   "version": "v1",
   "puzzles": [
     {
@@ -988,6 +988,18 @@
       },
       "date": "2026-08-30",
       "seed": "2026-08-30/wordsearch"
+    },
+    {
+      "type": "wordle",
+      "difficulty": "medium",
+      "length": 5,
+      "maxGuesses": 6,
+      "poolSize": 166,
+      "solution": {
+        "answer": "BAKER"
+      },
+      "date": "2026-08-30",
+      "seed": "2026-08-30/wordle"
     }
   ]
 }

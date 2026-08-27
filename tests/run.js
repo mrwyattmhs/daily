@@ -13,10 +13,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { Rng, generate, buildDailySet } from '../v1/index.js';
+import { Rng, generate, buildDailySet, scoreGuess } from '../v1/index.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const vocab = JSON.parse(readFileSync(join(ROOT, 'v1/data/vocab.json'), 'utf8'));
+const words5 = JSON.parse(readFileSync(join(ROOT, 'v1/data/words5.json'), 'utf8'));
 
 let failures = 0;
 function check(name, problems) {
@@ -234,11 +235,69 @@ function checkWordsearch(p) {
   return e;
 }
 
+/* ---------- word guess ---------- */
+
+/** Independent scorer, written from the rule rather than from the source. */
+function referenceScore(guess, answer) {
+  const n = guess.length;
+  const out = new Array(n).fill('absent');
+  const claimed = new Array(n).fill(false);
+  for (let i = 0; i < n; i++) {
+    if (guess[i] === answer[i]) {
+      out[i] = 'correct';
+      claimed[i] = true;
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    if (out[i] === 'correct') continue;
+    for (let j = 0; j < n; j++) {
+      if (!claimed[j] && answer[j] === guess[i] && guess[j] !== answer[j]) {
+        out[i] = 'present';
+        claimed[j] = true;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+function checkWordle(p) {
+  const e = [];
+  const answer = p.solution?.answer ?? '';
+  if (!/^[A-Z]{5}$/.test(answer)) e.push(`bad answer "${answer}"`);
+  if (!words5.words.includes(answer)) e.push('answer not in the pool');
+  if (p.maxGuesses < 1) e.push('maxGuesses < 1');
+  // A correct guess must score all-correct, and scoring must match the
+  // reference on every letter.
+  if (scoreGuess(answer, answer).some((m) => m !== 'correct')) e.push('self-guess not all correct');
+  const pool = words5.words;
+  for (let i = 0; i < 400; i++) {
+    const guess = pool[(i * 37) % pool.length];
+    const mine = scoreGuess(guess, answer).join(',');
+    const ref = referenceScore(guess, answer).join(',');
+    if (mine !== ref) {
+      e.push(`scoring disagrees with reference for ${guess}`);
+      break;
+    }
+    // No letter may be marked more often than it occurs in the answer.
+    for (const letter of new Set(guess)) {
+      const marked = [...guess].filter((c, k) => c === letter && mine.split(',')[k] !== 'absent').length;
+      const available = [...answer].filter((c) => c === letter).length;
+      if (marked > available) {
+        e.push(`over-marked ${letter} in ${guess}`);
+        break;
+      }
+    }
+  }
+  return e;
+}
+
 const CHECKS = {
   sudoku: checkSudoku,
   shikaku: checkShikaku,
   slitherlink: checkSlitherlink,
   wordsearch: checkWordsearch,
+  wordle: checkWordle,
 };
 
 /* ---------- run ---------- */
@@ -281,21 +340,48 @@ for (const [key, unit] of Object.entries(vocab.units)) {
   check(`${key} (${p.rows}x${p.cols}, ${p.words.length} terms)`, checkWordsearch(p));
 }
 
+console.log('\nWord guess');
+for (const difficulty of ['easy', 'medium', 'hard']) {
+  const problems = [];
+  const words = [];
+  for (let i = 0; i < 4; i++) {
+    const p = generate('wordle', new Rng(`t-wd-${i}`), {
+      words: words5.words,
+      difficulty,
+      dayNumber: i * 13,
+    });
+    problems.push(...checkWordle(p));
+    words.push(`${p.solution.answer}/${p.difficulty}`);
+  }
+  check(`${difficulty} (${words.join(' ')})`, problems);
+}
+{
+  // The pool must be walked, not sampled: 150 consecutive days, no repeats.
+  const seen = new Set();
+  const problems = [];
+  for (let d = 0; d < 150; d++) {
+    const p = generate('wordle', new Rng('rotation'), { words: words5.words, dayNumber: d });
+    if (seen.has(p.solution.answer)) problems.push(`repeat after ${d} days: ${p.solution.answer}`);
+    seen.add(p.solution.answer);
+  }
+  check(`no repeats in 150 consecutive days (${seen.size} distinct)`, problems);
+}
+
 console.log('\nDaily sets');
 for (const date of ['2026-01-01', '2026-02-28', '2026-06-15', '2026-08-27', '2026-12-31']) {
-  const set = buildDailySet(date, { vocab });
+  const set = buildDailySet(date, { vocab, words5 });
   const problems = [];
   for (const p of set.puzzles) problems.push(...(CHECKS[p.type]?.(p) ?? [`no check for ${p.type}`]));
-  if (set.puzzles.length !== 4) problems.push(`expected 4 puzzles, got ${set.puzzles.length}`);
+  if (set.puzzles.length !== 5) problems.push(`expected 5 puzzles, got ${set.puzzles.length}`);
   check(`${date} (${set.puzzles.map((p) => p.difficulty).join(', ')})`, problems);
 }
 
 console.log('\nDeterminism');
 {
   const strip = (s) => JSON.stringify({ ...s, generatedAt: null });
-  const a = strip(buildDailySet('2026-08-27', { vocab }));
-  const b = strip(buildDailySet('2026-08-27', { vocab }));
-  const c = strip(buildDailySet('2026-08-28', { vocab }));
+  const a = strip(buildDailySet('2026-08-27', { vocab, words5 }));
+  const b = strip(buildDailySet('2026-08-27', { vocab, words5 }));
+  const c = strip(buildDailySet('2026-08-28', { vocab, words5 }));
   check('same date gives identical puzzles', a === b ? [] : ['two builds of one date differ']);
   check('different dates give different puzzles', a !== c ? [] : ['two dates produced the same set']);
 }

@@ -1,6 +1,6 @@
 {
   "date": "2026-09-03",
-  "generatedAt": "2026-08-27T13:17:07.884Z",
+  "generatedAt": "2026-08-27T18:08:49.989Z",
   "version": "v1",
   "puzzles": [
     {
@@ -931,6 +931,18 @@
       },
       "date": "2026-09-03",
       "seed": "2026-09-03/wordsearch"
+    },
+    {
+      "type": "wordle",
+      "difficulty": "medium",
+      "length": 5,
+      "maxGuesses": 6,
+      "poolSize": 166,
+      "solution": {
+        "answer": "FLOCK"
+      },
+      "date": "2026-09-03",
+      "seed": "2026-09-03/wordle"
     }
   ]
 }
