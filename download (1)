@@ -1,0 +1,4 @@
+This file's presence disables Jekyll processing on GitHub Pages. Its contents
+are ignored, but it is deliberately not empty: zero-byte files are silently
+dropped by some upload tools, and losing this one makes Pages render README.md
+as the homepage instead of serving index.html.

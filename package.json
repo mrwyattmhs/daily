@@ -1,0 +1,17 @@
+{
+  "name": "puzzle-generators",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deterministic math puzzle generators (sudoku, rectangles, loop, word search) plus a daily page built from them.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "generate": "node scripts/generate-daily.js",
+    "build": "node scripts/build-site.js",
+    "daily": "node scripts/generate-daily.js && node scripts/build-site.js",
+    "ahead": "node scripts/generate-daily.js --days 15",
+    "test": "node tests/run.js"
+  }
+}
