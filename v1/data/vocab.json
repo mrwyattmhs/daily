@@ -1,0 +1,85 @@
+{
+  "_comment": "Edit freely. Each key is a unit; the daily build picks one unit and hides its terms. Terms are normalized to A-Z, so hyphens and spaces are fine.",
+  "units": {
+    "algebra-foundations": {
+      "label": "Algebra foundations",
+      "words": [
+        "variable", "coefficient", "constant", "expression", "equation",
+        "inequality", "distribute", "factor", "term", "evaluate",
+        "substitute", "inverse", "absolute value", "integer", "rational"
+      ]
+    },
+    "linear-functions": {
+      "label": "Linear functions",
+      "words": [
+        "slope", "intercept", "y-intercept", "linear", "parallel",
+        "perpendicular", "domain", "range", "function", "rate of change",
+        "point slope", "standard form", "collinear", "increasing", "table"
+      ]
+    },
+    "systems": {
+      "label": "Systems of equations",
+      "words": [
+        "system", "substitution", "elimination", "intersection", "consistent",
+        "inconsistent", "dependent", "independent", "solution", "graphing",
+        "matrix", "variable", "constraint", "feasible", "vertex"
+      ]
+    },
+    "quadratics": {
+      "label": "Quadratic functions",
+      "words": [
+        "quadratic", "parabola", "vertex", "axis of symmetry", "discriminant",
+        "roots", "zeros", "completing the square", "factoring", "maximum",
+        "minimum", "concavity", "standard form", "vertex form", "imaginary"
+      ]
+    },
+    "polynomials": {
+      "label": "Polynomials",
+      "words": [
+        "polynomial", "degree", "monomial", "binomial", "trinomial",
+        "leading coefficient", "synthetic division", "remainder", "end behavior", "multiplicity",
+        "factor theorem", "descending", "cubic", "quartic", "coefficient"
+      ]
+    },
+    "radicals-exponents": {
+      "label": "Radicals and exponents",
+      "words": [
+        "radical", "radicand", "index", "simplify", "rationalize",
+        "conjugate", "exponent", "base", "power", "root",
+        "cube root", "square root", "extraneous", "perfect square", "surd"
+      ]
+    },
+    "exponential-log": {
+      "label": "Exponentials and logarithms",
+      "words": [
+        "exponential", "logarithm", "growth", "decay", "asymptote",
+        "natural log", "base", "compound", "half life", "inverse",
+        "common log", "exponent", "continuous", "doubling", "interest"
+      ]
+    },
+    "geometry": {
+      "label": "Geometry",
+      "words": [
+        "congruent", "similar", "hypotenuse", "perimeter", "area",
+        "volume", "bisector", "transversal", "polygon", "quadrilateral",
+        "circumference", "tangent", "chord", "arc", "theorem"
+      ]
+    },
+    "trigonometry": {
+      "label": "Trigonometry",
+      "words": [
+        "sine", "cosine", "tangent", "amplitude", "period",
+        "radian", "degree", "unit circle", "identity", "reference angle",
+        "cosecant", "secant", "cotangent", "phase shift", "coterminal"
+      ]
+    },
+    "statistics": {
+      "label": "Statistics and probability",
+      "words": [
+        "mean", "median", "mode", "outlier", "variance",
+        "deviation", "quartile", "histogram", "correlation", "regression",
+        "sample", "population", "probability", "independent", "distribution"
+      ]
+    }
+  }
+}

@@ -1,0 +1,289 @@
+/**
+ * Interactive puzzle styles.
+ *
+ * Colours come from the host page via custom properties, with fallbacks so the
+ * module works on a page that defines nothing.
+ */
+
+.pz-play {
+  --pz-ink: var(--ink, #1f1e24);
+  --pz-soft: var(--ink-soft, #55535f);
+  --pz-accent: var(--ditto, #55429b);
+  --pz-accent-pale: var(--ditto-pale, #c9c2e6);
+  --pz-flag: var(--flag, #c8452a);
+  --pz-rule: var(--rule, #b9bcc6);
+  --pz-paper: var(--paper, #eeeff2);
+  --pz-paper-deep: var(--paper-deep, #e3e5ea);
+  --pz-mono: var(--mono, "Courier Prime", ui-monospace, monospace);
+  --pz-good: #3f6b4a;
+}
+
+/* ---------- shared chrome ---------- */
+
+.pz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.pz-btn {
+  appearance: none;
+  padding: 0.5rem 0.95rem;
+  font-family: var(--pz-mono);
+  font-size: 0.76rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--pz-ink);
+  background: transparent;
+  border: 1.5px solid var(--pz-ink);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.pz-btn:hover { color: var(--pz-paper); background: var(--pz-accent); border-color: var(--pz-accent); }
+.pz-btn-danger:hover { background: var(--pz-flag); border-color: var(--pz-flag); }
+.pz-btn-on { color: var(--pz-paper); background: var(--pz-accent); border-color: var(--pz-accent); }
+
+.pz-status {
+  margin: 0.85rem 0 0;
+  font-family: var(--pz-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--pz-soft);
+  min-height: 1.5em;
+}
+.pz-status-ok { color: var(--pz-good); }
+.pz-status-warn { color: var(--pz-flag); }
+.pz-status-done { color: var(--pz-accent); font-weight: 700; }
+
+.pz-hint {
+  margin: 0.4rem 0 0;
+  font-family: var(--pz-mono);
+  font-size: 0.7rem;
+  color: var(--pz-soft);
+  opacity: 0.75;
+}
+
+.pz-svg {
+  display: block;
+  width: 100%;
+  max-width: 30rem;
+  height: auto;
+  /* Without this a touch drag scrolls the page instead of drawing. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pz-play :focus-visible { outline: 2px solid var(--pz-accent); outline-offset: 3px; }
+
+/* ---------- sudoku ---------- */
+
+.pz-sudoku {
+  display: grid;
+  grid-template-rows: repeat(9, minmax(0, 1fr));
+  width: 100%;
+  max-width: 30rem;
+  aspect-ratio: 1;
+  border: 2.5px solid var(--pz-ink);
+  background: var(--pz-paper);
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.pz-sudoku-row { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); }
+
+.pz-cell {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--pz-rule);
+  border-bottom: 1px solid var(--pz-rule);
+  cursor: pointer;
+  font-family: var(--pz-mono);
+  container-type: inline-size;
+}
+
+.pz-sudoku-row:nth-child(3n) .pz-cell { border-bottom-color: var(--pz-ink); border-bottom-width: 2px; }
+.pz-sudoku-row:last-child .pz-cell { border-bottom: none; }
+.pz-cell:nth-child(3n) { border-right-color: var(--pz-ink); border-right-width: 2px; }
+.pz-cell:last-child { border-right: none; }
+
+.pz-value { font-size: clamp(0.95rem, 3.4vw, 1.4rem); font-weight: 400; color: var(--pz-accent); }
+.pz-cell-given .pz-value { font-weight: 700; color: var(--pz-ink); }
+
+.pz-marks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  font-size: clamp(0.4rem, 1.35vw, 0.58rem);
+  color: var(--pz-soft);
+  line-height: 1;
+}
+
+.pz-cell-peer { background: color-mix(in srgb, var(--pz-accent) 6%, transparent); }
+.pz-cell-match { background: color-mix(in srgb, var(--pz-accent) 15%, transparent); }
+.pz-cell-cursor { background: color-mix(in srgb, var(--pz-accent) 24%, transparent); }
+.pz-cell-cursor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--pz-accent);
+  pointer-events: none;
+}
+.pz-cell-conflict .pz-value { color: var(--pz-flag); }
+.pz-cell-conflict { background: color-mix(in srgb, var(--pz-flag) 14%, transparent); }
+.pz-sudoku.pz-pencil .pz-cell-cursor::after { border-style: dashed; }
+
+.pz-keypad {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.35rem;
+  max-width: 30rem;
+  margin-top: 0.85rem;
+}
+
+.pz-key {
+  appearance: none;
+  padding: 0.7rem 0;
+  font-family: var(--pz-mono);
+  font-size: 1rem;
+  color: var(--pz-ink);
+  background: var(--pz-paper-deep);
+  border: 1px solid var(--pz-rule);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.pz-key:hover { color: var(--pz-paper); background: var(--pz-accent); border-color: var(--pz-accent); }
+.pz-key-erase { grid-column: span 2; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+
+@media (min-width: 34rem) {
+  .pz-keypad { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+  .pz-key-erase { grid-column: span 1; font-size: 0.6rem; }
+}
+
+/* ---------- loop ---------- */
+
+.pz-dot { fill: var(--pz-rule); }
+
+.pz-edge { stroke: transparent; stroke-width: 4.5; stroke-linecap: round; }
+.pz-edge-on { stroke: var(--pz-accent); }
+
+.pz-cross { stroke: transparent; stroke-width: 2.2; stroke-linecap: round; }
+.pz-cross-on { stroke: var(--pz-soft); }
+
+.pz-surface { fill: transparent; cursor: pointer; }
+/* Ghost of the edge the pointer is closest to. Replaces per-edge hover, and
+   works at any board size because the target is computed, not drawn. */
+.pz-edge-hover { stroke: color-mix(in srgb, var(--pz-accent) 45%, transparent); }
+
+.pz-clue { font-family: var(--pz-mono); font-size: 20px; font-weight: 700; fill: var(--pz-ink); }
+.pz-clue-done { fill: var(--pz-rule); }
+.pz-clue-bad { fill: var(--pz-flag); }
+
+.pz-edge-cursor { fill: none; stroke: var(--pz-accent); stroke-width: 1.5; stroke-dasharray: 3 2; }
+
+/* ---------- rectangles ---------- */
+
+.pz-grid-line { stroke: var(--pz-rule); stroke-width: 0.9; }
+.pz-frame { fill: none; stroke: var(--pz-ink); stroke-width: 2.6; }
+
+.pz-rects { cursor: crosshair; }
+
+.pz-rect-fill { pointer-events: none; }
+.pz-rect-fill.pz-rect-ok { fill: color-mix(in srgb, var(--pz-accent) 13%, transparent); }
+.pz-rect-fill.pz-rect-bad { fill: color-mix(in srgb, var(--pz-flag) 12%, transparent); }
+
+.pz-rect-edge { fill: none; stroke-width: 2.4; stroke-linejoin: round; pointer-events: none; }
+.pz-rect-edge.pz-rect-ok { stroke: var(--pz-accent); }
+.pz-rect-edge.pz-rect-bad { stroke: var(--pz-flag); stroke-dasharray: 5 3; }
+
+.pz-preview { fill: none; stroke-width: 2.6; stroke-dasharray: 6 3; pointer-events: none; }
+.pz-preview-ok { stroke: var(--pz-good); fill: color-mix(in srgb, var(--pz-good) 10%, transparent); }
+.pz-preview-bad { stroke: var(--pz-soft); }
+.pz-preview-clash { stroke: var(--pz-flag); fill: color-mix(in srgb, var(--pz-flag) 10%, transparent); }
+.pz-preview-label {
+  font-family: var(--pz-mono);
+  font-size: 15px;
+  font-weight: 700;
+  fill: var(--pz-soft);
+  pointer-events: none;
+}
+
+.pz-clue-disc { fill: var(--pz-paper); stroke: var(--pz-ink); stroke-width: 1.4; pointer-events: none; }
+.pz-rects .pz-clue { pointer-events: none; }
+
+/* ---------- word search ---------- */
+
+.pz-wordgrid {
+  display: grid;
+  /* minmax(0,...) stops the letter cells from forcing the grid wider than
+     the page on a narrow phone. */
+  grid-template-columns: repeat(var(--pz-cols, 14), minmax(0, 1fr));
+  max-width: 30rem;
+  font-family: var(--pz-mono);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: pointer;
+}
+
+.pz-letter {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  font-size: clamp(0.62rem, 2.1vw, 0.9rem);
+  color: var(--pz-ink);
+  border-radius: 50%;
+}
+
+.pz-letter-found { background: color-mix(in srgb, var(--pz-accent) 20%, transparent); }
+.pz-letter-selected { background: var(--pz-accent); color: var(--pz-paper); }
+
+.pz-wordlist {
+  columns: 2;
+  column-gap: 2rem;
+  list-style: none;
+  padding: 0;
+  margin: 1.25rem 0 0;
+  max-width: 30rem;
+  font-family: var(--pz-mono);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pz-word { break-inside: avoid; padding: 0.1rem 0; color: var(--pz-ink); }
+.pz-word-found { color: var(--pz-rule); text-decoration: line-through; }
+
+/* ---------- fallback swap ---------- */
+
+/* The static SVG stays in the DOM until its interactive replacement mounts. */
+[data-sheet].is-interactive .pz-fallback { display: none; }
+[data-sheet]:not(.is-interactive) .pz-play { display: none; }
+
+/* ---------- print ---------- */
+
+@media print {
+  .pz-controls,
+  .pz-keypad,
+  .pz-hint,
+  .pz-status { display: none; }
+
+  /* Print the blank puzzle, not the half-finished screen state: pencil work
+     belongs on the paper copy, not in the ink. */
+  [data-sheet].is-interactive .pz-fallback { display: block; }
+  [data-sheet].is-interactive .pz-play { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pz-play * { transition: none !important; animation: none !important; }
+}
