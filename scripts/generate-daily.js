@@ -20,6 +20,7 @@ const PUZZLE_DIR = join(ROOT, 'puzzles');
 const TZ = process.env.PUZZLE_TZ || 'America/New_York';
 
 const vocab = JSON.parse(readFileSync(join(ROOT, 'v1/data/vocab.json'), 'utf8'));
+const words5 = JSON.parse(readFileSync(join(ROOT, 'v1/data/words5.json'), 'utf8'));
 
 function addDays(dk, n) {
   const d = new Date(`${dk}T00:00:00Z`);
@@ -120,6 +121,13 @@ function verify(set) {
       }
     }
 
+    if (p.type === 'wordle') {
+      const answer = p.solution?.answer ?? '';
+      if (!/^[A-Z]{5}$/.test(answer)) problems.push(`wordle: bad answer "${answer}"`);
+      if (!words5.words.includes(answer)) problems.push('wordle: answer not in the pool');
+      if (p.maxGuesses < 1) problems.push('wordle: maxGuesses < 1');
+    }
+
     if (p.type === 'wordsearch') {
       const DIR = {
         E: [0, 1], W: [0, -1], S: [1, 0], N: [-1, 0],
@@ -154,7 +162,7 @@ function buildOne(dk, { force = false } = {}) {
   }
 
   const started = Date.now();
-  const set = buildDailySet(dk, { vocab });
+  const set = buildDailySet(dk, { vocab, words5 });
   const problems = verify(set);
   if (problems.length) {
     console.error(`FAILED ${dk}:`);

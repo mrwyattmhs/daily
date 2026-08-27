@@ -131,6 +131,10 @@ const LABELS = {
     rule: 'Draw one closed loop on the grid lines. A number counts how many of that cell’s sides it uses.',
   },
   wordsearch: { name: 'Word search', rule: 'Any direction, including backwards and diagonal.' },
+  wordle: {
+    name: 'Word guess',
+    rule: 'Guess the five-letter word in six tries. Any five letters are accepted.',
+  },
 };
 
 function puzzleSection(p, index, tip) {
@@ -141,6 +145,7 @@ function puzzleSection(p, index, tip) {
   if (p.type === 'shikaku') meta.push(`${p.clues.length} rectangles`);
   if (p.type === 'slitherlink') meta.push(`${p.stats.clueCount} clues`);
   if (p.type === 'wordsearch') meta.push(`${p.words.length} terms`);
+  if (p.type === 'wordle') meta.push(`${p.maxGuesses} tries`);
   if (p.theme) meta.push(p.theme);
 
   const wordList =
@@ -151,6 +156,21 @@ function puzzleSection(p, index, tip) {
           .map((w) => `<li>${esc(w)}</li>`)
           .join('')}</ul>`
       : '';
+
+  // Every other puzzle ships static SVG for print and no-JS. A word guess has
+  // nothing to draw — the board is blank until someone plays, and printing the
+  // answer would defeat it — so it gets a plain notice instead.
+  const fallback =
+    p.type === 'wordle'
+      ? `<figure class="pz-fallback grid-wrap">
+    <p class="pz-nojs">This one needs JavaScript, and there's nothing to print — the board fills in as you guess.</p>
+  </figure>`
+      : `<figure class="pz-fallback grid-wrap" data-solved="false">
+    <div class="grid-layer grid-puzzle">${renderPuzzle(p, { showSolution: false })}</div>
+    <div class="grid-layer grid-answer">${renderPuzzle(p, { showSolution: true })}</div>
+    ${wordList}
+    <button class="reveal" type="button" aria-expanded="false" data-target="${id}">Show solution</button>
+  </figure>`;
 
   return `
 <section class="sheet" id="${id}" data-sheet="${esc(p.type)}">
@@ -164,12 +184,7 @@ function puzzleSection(p, index, tip) {
   </header>
   ${tip ? `<aside class="tip"><span class="tip-label">Try this</span><p>${esc(tip)}</p></aside>` : ''}
   <div class="pz-play" data-play-slot="${esc(p.type)}"></div>
-  <figure class="pz-fallback grid-wrap" data-solved="false">
-    <div class="grid-layer grid-puzzle">${renderPuzzle(p, { showSolution: false })}</div>
-    <div class="grid-layer grid-answer">${renderPuzzle(p, { showSolution: true })}</div>
-    ${wordList}
-    <button class="reveal" type="button" aria-expanded="false" data-target="${id}">Show solution</button>
-  </figure>
+  ${fallback}
 </section>`;
 }
 
