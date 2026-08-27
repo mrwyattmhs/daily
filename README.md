@@ -1,0 +1,2 @@
+# daily
+Daily Puzzles
