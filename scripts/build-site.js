@@ -28,6 +28,13 @@ const SITE_BYLINE = process.env.PUZZLE_SITE_BYLINE || 'Mr. Wyatt · Mathematics'
 
 /* ---------- the day's copy ---------- */
 
+const COUNT_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'];
+
+/** Spell a small count, so copy reads naturally and can't go stale. */
+function countWord(n) {
+  return COUNT_WORDS[n] ?? String(n);
+}
+
 /**
  * Deterministic fallback copy. Used when no API key is set or the call fails,
  * so a build never breaks over a missing greeting.
@@ -43,11 +50,13 @@ function fallbackCopy(dk, types) {
   const day = Math.floor(Date.parse(`${dk}T00:00:00Z`) / 86400000);
   const pick = types[day % types.length];
   return {
-    greeting: 'Four puzzles. Pencil optional, patience required.',
+    // Derived, not hardcoded: this line said "Four puzzles" for a week after a
+    // fifth was added.
+    greeting: `${countWord(types.length)} puzzles. Pencil optional, patience required.`,
     tipFor: pick,
     tip: tips[pick] ?? tips.sudoku,
     noteTitle: 'Today',
-    note: 'Every puzzle below has exactly one solution, checked before it was published.',
+    note: 'Every grid below was checked for a single solution before it was published.',
     source: 'fallback',
   };
 }
@@ -213,7 +222,9 @@ function page(set, copy) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(SITE_TITLE)} · ${esc(rest)}</title>
-<meta name="description" content="Four hand-verified math puzzles for ${esc(rest)}: sudoku, rectangles, loop, and a word search.">
+<meta name="description" content="${esc(countWord(set.puzzles.length))} puzzles for ${esc(rest)}: ${esc(
+    set.puzzles.map((p) => (LABELS[p.type] ?? { name: p.type }).name.toLowerCase()).join(', '),
+  )}.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="v1/play/play.css">
@@ -529,7 +540,7 @@ ${sections}
 
 <footer class="foot">
   <p>Built ${esc(set.generatedAt.slice(0, 16).replace('T', ' '))} UTC · library ${esc(set.version)} · copy ${esc(copy.source)}</p>
-  <p>Every puzzle is checked for a unique solution before publishing.</p>
+  <p>Every grid is checked for a single solution before publishing.</p>
   <p>Pull today's puzzles as data: <code>puzzles/${esc(dk)}.json</code> · <a href="puzzles/index.json">all dates</a></p>
 </footer>
 
