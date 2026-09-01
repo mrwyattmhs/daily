@@ -35,6 +35,10 @@ on:
         description: 'Rebuild even if already published, and regenerate existing puzzle JSON'
         type: boolean
         default: false
+      allow_offdate:
+        description: 'Also publish a past/future date to the home page (normally archive-only)'
+        type: boolean
+        default: false
 
 # Never let two runs push at once.
 concurrency:
@@ -57,15 +61,28 @@ jobs:
       - name: Work out the target date
         id: target
         env:
+          # Only a manual run can set this. It is empty for schedule and push.
           INPUT_DATE: ${{ inputs.date }}
         run: |
+          TODAY=$(TZ=America/New_York date +%F)
+          DATE="$TODAY"
           if [ -n "$INPUT_DATE" ]; then
-            DATE="$INPUT_DATE"
-          else
-            DATE=$(TZ=America/New_York date +%F)
+            # Re-running an old workflow run replays its original inputs, so a
+            # stale date can arrive here without anyone typing it today. Accept
+            # it only if it is a real date, and say loudly when it isn't today.
+            if printf '%s' "$INPUT_DATE" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+              DATE="$INPUT_DATE"
+            else
+              echo "::warning::ignoring unparseable date input '$INPUT_DATE'"
+            fi
           fi
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
-          echo "Target date: $DATE"
+          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
+          echo "Today (America/New_York): $TODAY"
+          echo "Target date:              $DATE"
+          if [ "$DATE" != "$TODAY" ]; then
+            echo "::warning::Target date $DATE is not today ($TODAY). The home page is left alone unless allow_offdate is set; only archive/$DATE.html is written."
+          fi
 
       - name: Skip if already published
         id: guard
@@ -99,7 +116,12 @@ jobs:
         if: steps.guard.outputs.skip == 'false'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: node scripts/build-site.js "${{ steps.target.outputs.date }}"
+        run: |
+          if [ "${{ inputs.allow_offdate }}" = "true" ]; then
+            node scripts/build-site.js "${{ steps.target.outputs.date }}" --allow-offdate
+          else
+            node scripts/build-site.js "${{ steps.target.outputs.date }}"
+          fi
 
       - name: Commit and push
         if: steps.guard.outputs.skip == 'false'
