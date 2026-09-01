@@ -19,7 +19,14 @@ const CROSS = 2;
 const CELL = 40;
 const PAD = 18;
 
-export function mountSlitherlink(puzzle, root) {
+export function mountSlitherlink(puzzle, root, opts = {}) {
+  let reported = false;
+  const reportSolved = () => {
+    if (reported || revealed) return;
+    reported = true;
+    opts.onSolved?.(puzzle.type);
+  };
+
   const { rows, cols, clues } = puzzle;
   const hCount = (rows + 1) * cols;
   const vCount = rows * (cols + 1);
@@ -248,6 +255,8 @@ export function mountSlitherlink(puzzle, root) {
     board.classList.toggle('pz-has-error', badClues.size > 0 || badVertices.length > 0);
 
     const drawn = state.filter((s) => s === LINE).length;
+    if (!revealed && isSolved()) reportSolved();
+
     if (revealed) status.set('Solution shown.', 'warn');
     else if (isSolved()) status.set('Solved. One closed loop, every number satisfied.', 'done');
     else if (badVertices.length) {

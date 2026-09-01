@@ -345,6 +345,91 @@
 .pz-kb-present { color: var(--pz-ink); background: var(--pz-accent-pale); border-color: var(--pz-accent-pale); }
 .pz-kb-absent { color: var(--pz-paper); background: var(--pz-soft); border-color: var(--pz-soft); opacity: 0.65; }
 
+/* ---------- trophy badge ---------- */
+
+.pz-trophy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  margin-top: 2rem;
+  padding: 0.7rem 0.95rem;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft, #55535f);
+  background: var(--paper-deep, #e3e5ea);
+  border-left: 3px solid var(--rule, #b9bcc6);
+}
+
+.pz-trophy-count {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink, #1f1e24);
+}
+
+.pz-trophy-dots { display: inline-flex; gap: 0.3rem; }
+
+.pz-trophy-dot {
+  width: 0.62rem;
+  height: 0.62rem;
+  border: 1.5px solid var(--rule, #b9bcc6);
+  border-radius: 50%;
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+
+.pz-trophy-dot-on {
+  background: var(--ditto, #55429b);
+  border-color: var(--ditto, #55429b);
+}
+
+.pz-trophy-perfect {
+  border-left-color: var(--ditto, #55429b);
+  color: var(--ditto, #55429b);
+}
+.pz-trophy-perfect .pz-trophy-count { color: var(--ditto, #55429b); }
+
+/* ---------- celebration ---------- */
+
+.pz-celebrate-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  width: 100%;
+  height: 100%;
+  /* Must never intercept clicks: the page stays fully usable underneath. */
+  pointer-events: none;
+}
+
+.pz-celebrate-stamp {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 91;
+  transform: translate(-50%, -50%) scale(0.94);
+  padding: 0.7rem 1.5rem;
+  font-family: var(--display, ui-sans-serif, system-ui, sans-serif);
+  font-size: clamp(1.6rem, 7vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--paper, #eeeff2);
+  background: var(--ditto, #55429b);
+  border-radius: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 420ms ease, transform 420ms ease;
+}
+
+.pz-celebrate-stamp.pz-celebrate-in { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* The stamp is the whole celebration in this mode, so it holds still. */
+  .pz-celebrate-stamp { transition: opacity 300ms ease; transform: translate(-50%, -50%); }
+  .pz-celebrate-stamp.pz-celebrate-in { transform: translate(-50%, -50%); }
+  .pz-trophy-dot { transition: none; }
+}
+
 /* ---------- fallback swap ---------- */
 
 /* The static SVG stays in the DOM until its interactive replacement mounts. */
@@ -354,6 +439,10 @@
 /* ---------- print ---------- */
 
 @media print {
+  .pz-trophy,
+  .pz-celebrate-canvas,
+  .pz-celebrate-stamp { display: none; }
+
   /* The word guess has nothing to print: the board is empty until someone
      plays, and the answer must not appear on a handout. */
   [data-sheet="wordle"] { display: none; }

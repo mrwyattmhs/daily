@@ -31,7 +31,15 @@ const PEERS = (() => {
   return peers;
 })();
 
-export function mountSudoku(puzzle, root) {
+export function mountSudoku(puzzle, root, opts = {}) {
+  // Called once when the board is genuinely solved. Reveal never triggers it.
+  let reported = false;
+  const reportSolved = () => {
+    if (reported || revealed) return;
+    reported = true;
+    opts.onSolved?.(puzzle.type);
+  };
+
   const given = puzzle.puzzle;
   const saved = loadState(puzzle);
 
@@ -150,6 +158,8 @@ export function mountSudoku(puzzle, root) {
 
     const filled = values.filter((v, i) => given[i] === 0 && v !== 0).length;
     const blanks = given.filter((v) => v === 0).length;
+
+    if (!revealed && isComplete()) reportSolved();
 
     if (revealed) status.set('Solution shown.', 'warn');
     else if (isComplete()) status.set('Solved. Every row, column and box checks out.', 'done');

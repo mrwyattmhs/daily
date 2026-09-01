@@ -15,7 +15,14 @@ import { svg, el, controls, statusLine, loadState, saveState, clearState, deboun
 const CELL = 40;
 const PAD = 16;
 
-export function mountShikaku(puzzle, root) {
+export function mountShikaku(puzzle, root, opts = {}) {
+  let reported = false;
+  const reportSolved = () => {
+    if (reported || revealed) return;
+    reported = true;
+    opts.onSolved?.(puzzle.type);
+  };
+
   const { rows, cols, clues } = puzzle;
   const clueAt = new Map(clues.map((cl) => [cl.r * cols + cl.c, cl.value]));
 
@@ -159,6 +166,8 @@ export function mountShikaku(puzzle, root) {
 
     const uncovered = coverage().reduce((n, v) => n + (v === -1 ? 1 : 0), 0);
     const bad = rects.filter((r) => !judge(r).ok).length;
+
+    if (!revealed && isSolved()) reportSolved();
 
     if (revealed) status.set('Solution shown.', 'warn');
     else if (isSolved()) status.set('Solved. Every rectangle matches its number.', 'done');

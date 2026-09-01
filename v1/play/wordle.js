@@ -15,7 +15,16 @@ import { scoreGuess, keyboardState } from '../generators/wordle.js';
 const ROWS = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
 const MARK_EMOJI = { correct: '\u{1F7E9}', present: '\u{1F7E8}', absent: '\u{2B1C}' };
 
-export function mountWordle(puzzle, root) {
+export function mountWordle(puzzle, root, opts = {}) {
+  // Only a win reports. Running out of guesses and giving up both leave this
+  // unreported, which is what stops a lost word guess from earning fireworks.
+  let reported = false;
+  const reportSolved = () => {
+    if (reported || revealed) return;
+    reported = true;
+    opts.onSolved?.(puzzle.type);
+  };
+
   const answer = puzzle.solution.answer.toUpperCase();
   const length = puzzle.length ?? 5;
   const maxGuesses = puzzle.maxGuesses ?? 6;
@@ -126,6 +135,8 @@ export function mountWordle(puzzle, root) {
       const state = states.get(letter);
       node.className = `pz-kb-key${state ? ` pz-kb-${state}` : ''}`;
     }
+
+    if (!revealed && won()) reportSolved();
 
     copyBtn.hidden = !finished() || revealed;
 

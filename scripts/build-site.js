@@ -525,6 +525,7 @@ body::before {
     <span class="rest">${esc(rest)}</span>
   </h1>
   <p class="greeting">${esc(copy.greeting)}</p>
+  <div data-trophy-slot></div>
 </header>
 
 <nav class="index-bar" aria-label="Puzzles">${nav}</nav>

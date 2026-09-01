@@ -14,6 +14,8 @@ import { mountShikaku } from './shikaku.js';
 import { mountSlitherlink } from './slitherlink.js';
 import { mountWordsearch } from './wordsearch.js';
 import { mountWordle } from './wordle.js';
+import { mountTrophy } from './trophy.js';
+import * as progress from './progress.js';
 
 const MOUNTS = {
   sudoku: mountSudoku,
@@ -23,14 +25,24 @@ const MOUNTS = {
   wordle: mountWordle,
 };
 
-export { mountSudoku, mountShikaku, mountSlitherlink, mountWordsearch, mountWordle };
+export { mountSudoku, mountShikaku, mountSlitherlink, mountWordsearch, mountWordle, mountTrophy };
+export { progress };
+export { celebrate } from './celebrate.js';
 
-/** Mount one puzzle into an element, replacing whatever is there. */
-export function mount(puzzle, target) {
+/**
+ * Mount one puzzle into an element, replacing whatever is there.
+ *
+ * @param {object} puzzle
+ * @param {HTMLElement} target
+ * @param {object} [opts]
+ * @param {(type: string) => void} [opts.onSolved] Fired once, on a genuine
+ *   solve only. Reveal and Give up never fire it.
+ */
+export function mount(puzzle, target, opts = {}) {
   const fn = MOUNTS[puzzle.type];
   if (!fn) throw new Error(`no interactive view for "${puzzle.type}"`);
   target.replaceChildren();
-  fn(puzzle, target);
+  fn(puzzle, target, opts);
   return target;
 }
 
@@ -40,6 +52,8 @@ export function mount(puzzle, target) {
  * @param {object} [opts]
  * @param {string} [opts.dataId='puzzle-data'] Element holding the JSON payload.
  * @param {string} [opts.slot='[data-play-slot]'] Where interactive views go.
+ * @param {boolean} [opts.trophy=true] Mount the solve tally, if the page has a
+ *   `[data-trophy-slot]` element.
  */
 export function hydrate(opts = {}) {
   const dataId = opts.dataId ?? 'puzzle-data';
@@ -54,12 +68,18 @@ export function hydrate(opts = {}) {
     return [];
   }
 
+  const date = set.date;
+  const onSolved = (type) => {
+    // Idempotent, so it's safe that completion checks fire on every keystroke.
+    progress.record(date, type);
+  };
+
   const mounted = [];
   for (const puzzle of set.puzzles ?? []) {
     const slot = document.querySelector(`[data-play-slot="${puzzle.type}"]`);
     if (!slot) continue;
     try {
-      mount(puzzle, slot);
+      mount(puzzle, slot, { onSolved });
       // Only hide the static fallback once the interactive view is really up.
       const sheet = slot.closest('[data-sheet]');
       sheet?.classList.add('is-interactive');
@@ -68,5 +88,19 @@ export function hydrate(opts = {}) {
       console.error(`daily-puzzles: ${puzzle.type} failed to mount`, err);
     }
   }
+
+  // The tally counts only the puzzles that actually mounted, so a board that
+  // failed to load can't make the day impossible to complete.
+  if (opts.trophy !== false && mounted.length) {
+    const slot = document.querySelector('[data-trophy-slot]');
+    if (slot) {
+      try {
+        mountTrophy(slot, { date, types: mounted });
+      } catch (err) {
+        console.error('daily-puzzles: trophy failed to mount', err);
+      }
+    }
+  }
+
   return mounted;
 }

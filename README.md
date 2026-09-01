@@ -115,6 +115,33 @@ can be *lost*, so there is nothing to check mid-solve. Progress is written to
 localStorage keyed by date and puzzle, and is discarded automatically if the
 puzzle for that date changes.
 
+### Solve tally and celebration
+
+`v1/play/progress.js` keeps a record of solved puzzles in localStorage, and
+`hydrate()` renders a badge into any `[data-trophy-slot]` element showing the
+running total, one dot per puzzle in the day's set, and how many full days have
+been cleared.
+
+Only genuine solves count. **Reveal and Give up never record a solve**, and the
+word guess only reports on a win — so running out of guesses means the day
+cannot reach full completion. Recording is idempotent, because completion checks
+run on every keystroke.
+
+Clearing every puzzle on a page fires `celebrate()` from
+`v1/play/celebrate.js`: a canvas of fireworks in the page's accent colours plus
+a brief stamp. It fires **once per date** — a `celebrated` flag stops a
+returning visitor getting fireworks on every load — and is keyed to the page's
+date, so an archived day celebrates that day.
+
+Two constraints in that file are deliberate and shouldn't be relaxed casually:
+`prefers-reduced-motion` gets a still stamp and no animation at all, and there
+are no full-screen flashes or fast pulsing, which can provoke photosensitive
+seizures. Particles fade individually and the backdrop never flashes. The canvas
+is `pointer-events: none` and removes itself, so it can never trap the page.
+
+The tally is per-browser and editable from the console. It's a tally for fun,
+not a grade.
+
 ### Keyboard sharing
 
 Five puzzles share one page, so physical keys are split by type rather than by
@@ -184,18 +211,29 @@ cached freely and every visitor sees the same puzzle. Generators never call
 
 ## Schedule
 
-`.github/workflows/daily.yml` runs at 09:07 and 10:07 UTC. GitHub cron is UTC
-only and ignores daylight saving, so both slots are chosen to land before 07:00
-Eastern all year:
+`.github/workflows/daily.yml` runs on three staggered slots. GitHub cron is UTC
+only and ignores daylight saving, so these are pinned to the summer offsets for
+4am / 5am / 6am Eastern:
 
 | Slot | Summer (EDT) | Winter (EST) |
 | --- | --- | --- |
-| 09:07 UTC | 05:07 | 04:07 |
-| 10:07 UTC | 06:07 | 05:07 |
+| 08:09 UTC | 04:09 | 03:09 |
+| 09:14 UTC | 05:14 | 04:14 |
+| 10:17 UTC | 06:17 | 05:17 |
 
-Scheduled runs are often late and occasionally very late, so the first slot
-leaves nearly two hours of slack. The second is a catch-up that exits
-immediately if `archive/<date>.html` already exists.
+In winter each lands an hour earlier, which stays inside the window, so no DST
+handling is needed. Minutes are staggered and off the hour, where GitHub's queue
+is most congested.
+
+These slots are **redundancy, not speed**. GitHub delays each scheduled trigger
+independently, so extra slots don't make any one of them earlier — they cover a
+dropped or very late earlier slot. Whichever runs first publishes; the rest see
+`archive/<date>.html` already committed and exit in seconds, and the
+`concurrency` group means overlapping runs queue rather than race.
+
+There's also a `push` trigger on `v1/**` and `scripts/**`, so a code change
+rebuilds immediately instead of waiting for tomorrow. It can't loop: commits
+made with `GITHUB_TOKEN` don't trigger workflow runs.
 
 Each run also generates 15 days ahead. Today's puzzles were almost certainly
 written a fortnight ago, so a slow seed can never delay publishing.
@@ -255,7 +293,7 @@ above it.
 | --- | --- | --- |
 | `v1/generators/` | Produce puzzle data. No DOM, no styling. | nothing |
 | `v1/render/` | Static SVG for print and no-JS. | generator output |
-| `v1/play/` | Interactive boards. | generator output |
+| `v1/play/` | Interactive boards, tally, celebration. | generator output |
 
 The word guess is the one puzzle with no static form — its board is empty until
 someone plays and printing the answer would defeat it — so it shows a short

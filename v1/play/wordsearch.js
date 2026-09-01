@@ -16,7 +16,14 @@ const DIRECTIONS = [
 
 const normalize = (word) => word.toUpperCase().replace(/[^A-Z]/g, '');
 
-export function mountWordsearch(puzzle, root) {
+export function mountWordsearch(puzzle, root, opts = {}) {
+  let reported = false;
+  const reportSolved = () => {
+    if (reported || revealed) return;
+    reported = true;
+    opts.onSolved?.(puzzle.type);
+  };
+
   const { rows, cols, grid, words } = puzzle;
   const targets = words.map((w) => ({ display: w, letters: normalize(w) }));
 
@@ -121,6 +128,8 @@ export function mountWordsearch(puzzle, root) {
     listNodes.forEach((node, k) => node.classList.toggle('pz-word-found', k in found));
 
     const count = Object.keys(found).length;
+    if (!revealed && count === targets.length) reportSolved();
+
     if (revealed) status.set('All answers shown.', 'warn');
     else if (count === targets.length) status.set('Solved. Every term found.', 'done');
     else status.set(`${count} of ${targets.length} found.`);
