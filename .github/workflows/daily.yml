@@ -1,17 +1,31 @@
 name: Publish daily puzzles
 
 on:
+  # Rebuild whenever code changes, so a push doesn't wait for tomorrow's cron.
+  # Safe from looping: commits made with GITHUB_TOKEN don't trigger workflows.
+  push:
+    branches: [main]
+    paths:
+      - 'v1/**'
+      - 'scripts/**'
+      - '.github/workflows/daily.yml'
   schedule:
-    # Times are UTC and GitHub does not honour DST, so both entries are chosen
-    # to land before 07:00 Eastern year round:
-    #   09:07 UTC = 05:07 EDT (summer) / 04:07 EST (winter)
-    #   10:07 UTC = 06:07 EDT (summer) / 05:07 EST (winter)
-    # Scheduled runs are regularly 5-20 minutes late and occasionally much
-    # worse, so the first entry leaves nearly two hours of slack. The second is
-    # a catch-up: it no-ops if the first already published today.
-    # Both avoid :00, where GitHub's queue is most congested.
-    - cron: '7 9 * * *'
-    - cron: '7 10 * * *'
+    # Cron is UTC and ignores daylight saving, so these are pinned to the
+    # summer (EDT) offsets for 4am / 5am / 6am Eastern:
+    #   08:09 UTC = 04:09 EDT (summer) / 03:09 EST (winter)
+    #   09:14 UTC = 05:14 EDT (summer) / 04:14 EST (winter)
+    #   10:17 UTC = 06:17 EDT (summer) / 05:17 EST (winter)
+    # In winter each lands an hour earlier, which stays inside the window, so
+    # no DST handling is needed.
+    #
+    # These are redundancy, not speed: GitHub delays each scheduled trigger
+    # independently, so a later slot covers a dropped or very late earlier one.
+    # Whichever runs first publishes; the rest see archive/<date>.html already
+    # committed and exit in seconds. Minutes are staggered and off the hour,
+    # where GitHub's queue is most congested.
+    - cron: '9 8 * * *'
+    - cron: '14 9 * * *'
+    - cron: '17 10 * * *'
   workflow_dispatch:
     inputs:
       date:
