@@ -1,7 +1,7 @@
 name: Publish daily puzzles
 
 on:
-  # Rebuild whenever code changes, so a push doesn't wait for tomorrow's cron.
+  # Rebuild whenever code changes, so a push doesn't wait for the next cron.
   # Safe from looping: commits made with GITHUB_TOKEN don't trigger workflows.
   push:
     branches: [main]
@@ -10,136 +10,28 @@ on:
       - 'scripts/**'
       - '.github/workflows/daily.yml'
   schedule:
-    # Cron is UTC and ignores daylight saving, so these are pinned to the
-    # summer (EDT) offsets for 4am / 5am / 6am Eastern:
-    #   08:09 UTC = 04:09 EDT (summer) / 03:09 EST (winter)
-    #   09:14 UTC = 05:14 EDT (summer) / 04:14 EST (winter)
-    #   10:17 UTC = 06:17 EDT (summer) / 05:17 EST (winter)
-    # In winter each lands an hour earlier, which stays inside the window, so
-    # no DST handling is needed.
+    # The page is no longer built for a specific date — it reads the reader's
+    # date and fetches from a 30-day buffer of committed puzzle files. So this
+    # job has no deadline: it only tops the buffer up. If GitHub runs it hours
+    # late, or skips a day, or skips a week, the site still shows the right
+    # puzzles every morning.
     #
-    # These are redundancy, not speed: GitHub delays each scheduled trigger
-    # independently, so a later slot covers a dropped or very late earlier one.
-    # Whichever runs first publishes; the rest see archive/<date>.html already
-    # committed and exit in seconds. Minutes are staggered and off the hour,
-    # where GitHub's queue is most congested.
+    # Two slots rather than three, purely as cheap redundancy.
+    #   08:09 UTC = 04:09 EDT / 03:09 EST
+    #   14:23 UTC = 10:23 EDT / 09:23 EST
     - cron: '9 8 * * *'
-    - cron: '14 9 * * *'
-    - cron: '17 10 * * *'
+    - cron: '23 14 * * *'
   workflow_dispatch:
     inputs:
-      date:
-        description: 'Date to build (YYYY-MM-DD). Blank means today.'
-        required: false
       force:
-        description: 'Rebuild even if already published, and regenerate existing puzzle JSON'
+        description: 'Regenerate puzzle files that already exist'
         type: boolean
         default: false
-      allow_offdate:
-        description: 'Also publish a past/future date to the home page (normally archive-only)'
-        type: boolean
-        default: false
+      days:
+        description: 'How many days to keep buffered (default 30)'
+        required: false
 
 # Never let two runs push at once.
 concurrency:
   group: daily-puzzles
-  cancel-in-progress: false
-
-permissions:
-  contents: write
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Work out the target date
-        id: target
-        env:
-          # Only a manual run can set this. It is empty for schedule and push.
-          INPUT_DATE: ${{ inputs.date }}
-        run: |
-          TODAY=$(TZ=America/New_York date +%F)
-          DATE="$TODAY"
-          if [ -n "$INPUT_DATE" ]; then
-            # Re-running an old workflow run replays its original inputs, so a
-            # stale date can arrive here without anyone typing it today. Accept
-            # it only if it is a real date, and say loudly when it isn't today.
-            if printf '%s' "$INPUT_DATE" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
-              DATE="$INPUT_DATE"
-            else
-              echo "::warning::ignoring unparseable date input '$INPUT_DATE'"
-            fi
-          fi
-          echo "date=$DATE" >> "$GITHUB_OUTPUT"
-          echo "today=$TODAY" >> "$GITHUB_OUTPUT"
-          echo "Today (America/New_York): $TODAY"
-          echo "Target date:              $DATE"
-          if [ "$DATE" != "$TODAY" ]; then
-            echo "::warning::Target date $DATE is not today ($TODAY). The home page is left alone unless allow_offdate is set; only archive/$DATE.html is written."
-          fi
-
-      - name: Skip if already published
-        id: guard
-        env:
-          DATE: ${{ steps.target.outputs.date }}
-          FORCE: ${{ inputs.force }}
-        run: |
-          if [ -f "archive/$DATE.html" ] && [ "$FORCE" != "true" ]; then
-            echo "already built for $DATE, nothing to do"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      # Generating ahead means a bad seed or a slow solver can never delay
-      # publishing: the JSON for today was almost certainly written days ago.
-      - name: Generate puzzles (today plus two weeks)
-        if: steps.guard.outputs.skip == 'false'
-        # `force` has to reach the generator too, not just the publish guard.
-        # generate-daily.js skips any date whose JSON already exists, so after a
-        # change to the generators (adding a puzzle type, say) the old files
-        # would be kept forever and the new puzzle would silently never appear.
-        run: |
-          if [ "${{ inputs.force }}" = "true" ]; then
-            node scripts/generate-daily.js "${{ steps.target.outputs.date }}" --days 15 --force
-          else
-            node scripts/generate-daily.js "${{ steps.target.outputs.date }}" --days 15
-          fi
-
-      - name: Build the page
-        if: steps.guard.outputs.skip == 'false'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          if [ "${{ inputs.allow_offdate }}" = "true" ]; then
-            node scripts/build-site.js "${{ steps.target.outputs.date }}" --allow-offdate
-          else
-            node scripts/build-site.js "${{ steps.target.outputs.date }}"
-          fi
-
-      - name: Commit and push
-        if: steps.guard.outputs.skip == 'false'
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html archive puzzles
-          if git diff --cached --quiet; then
-            echo "no changes to commit"
-            exit 0
-          fi
-          git commit -m "Puzzles for ${{ steps.target.outputs.date }}"
-          # A concurrent run or a manual push could have moved main underneath us.
-          for attempt in 1 2 3; do
-            if git push; then
-              exit 0
-            fi
-            echo "push failed, rebasing (attempt $attempt)"
-            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || exit 1
-          done
-          exit 1
+  cancel-in-progress:
