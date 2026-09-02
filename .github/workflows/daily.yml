@@ -34,4 +34,61 @@ on:
 # Never let two runs push at once.
 concurrency:
   group: daily-puzzles
-  cancel-in-progress:
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # There is deliberately no "date" input and no skip guard any more.
+      #
+      # The date input caused a long-running bug: re-running an old workflow run
+      # replays its original inputs, so a re-run kept rebuilding a weeks-old day
+      # and putting it back on the site. With the page resolving its own date
+      # there is nothing for that input to usefully do, so it's gone.
+      #
+      # The guard is gone too. Generation skips days that already exist, so a
+      # repeat run costs a second or two and commits nothing.
+      - name: Top up the puzzle buffer
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PUZZLE_DAYS: ${{ inputs.days }}
+        run: |
+          echo "Today (America/New_York): $(TZ=America/New_York date +%F)"
+          if [ "${{ inputs.force }}" = "true" ]; then
+            node scripts/generate-daily.js --force
+          else
+            node scripts/generate-daily.js
+          fi
+
+      - name: Build the page shell
+        run: node scripts/build-site.js
+
+      - name: Commit and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A index.html puzzles
+          if git diff --cached --quiet; then
+            echo "nothing to commit; buffer already full and shell unchanged"
+            exit 0
+          fi
+          git commit -m "Top up puzzles ($(TZ=America/New_York date +%F))"
+          # A concurrent run or a manual push could have moved main underneath us.
+          for attempt in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "push failed, rebasing (attempt $attempt)"
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || exit 1
+          done
+          exit 1
