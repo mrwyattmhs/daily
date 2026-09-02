@@ -19,8 +19,111 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PUZZLE_DIR = join(ROOT, 'puzzles');
 const TZ = process.env.PUZZLE_TZ || 'America/New_York';
 
+// Deep enough that a long weekend, a broken workflow or a school holiday can't
+// drain it before someone notices. Each day is about 13KB.
+const DEFAULT_DAYS = Number(process.env.PUZZLE_DAYS || 30);
+// Past days kept for the day picker. Older files are pruned.
+const KEEP_PAST = Number(process.env.PUZZLE_KEEP_PAST || 7);
+
+const MODEL = process.env.PUZZLE_MODEL || 'claude-haiku-4-5-20251001';
+
 const vocab = JSON.parse(readFileSync(join(ROOT, 'v1/data/vocab.json'), 'utf8'));
 const words5 = JSON.parse(readFileSync(join(ROOT, 'v1/data/words5.json'), 'utf8'));
+
+const COUNT_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'];
+
+/** Spell a small count, so copy reads naturally and can't go stale. */
+function countWord(n) {
+  return COUNT_WORDS[n] ?? String(n);
+}
+
+/**
+ * Deterministic fallback copy. Used when no API key is set or the call fails,
+ * so a build never breaks over a missing greeting.
+ */
+function fallbackCopy(dk, types) {
+  const tips = {
+    sudoku: 'Scan for the digit that appears most often already — it usually has one forced home left.',
+    shikaku: 'Start with prime numbers. A 5 or a 7 can only be a 1-wide strip, so its shape is fixed.',
+    slitherlink:
+      'A 0 is the strongest clue on the board. Mark all four of its sides as empty before anything else.',
+    wordsearch: 'Hunt for uncommon letters first — one X or Q narrows a word to a couple of places.',
+  };
+  const day = Math.floor(Date.parse(`${dk}T00:00:00Z`) / 86400000);
+  const pick = types[day % types.length];
+  return {
+    // Derived, not hardcoded: this line said "Four puzzles" for a week after a
+    // fifth was added.
+    greeting: `${countWord(types.length)} puzzles. Pencil optional, patience required.`,
+    tipFor: pick,
+    tip: tips[pick] ?? tips.sudoku,
+    noteTitle: 'Today',
+    note: 'Every grid below was checked for a single solution before it was published.',
+    source: 'fallback',
+  };
+}
+
+async function fetchCopy(dk, puzzles) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  const types = puzzles.map((p) => p.type);
+  if (!key) {
+    console.log('  copy: no ANTHROPIC_API_KEY, using fallback');
+    return fallbackCopy(dk, types);
+  }
+
+  const readable = new Date(`${dk}T12:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+  const lineup = puzzles.map((p) => `${p.type} (${p.difficulty})`).join(', ');
+
+  const prompt = `You write the daily copy for a high school math teacher's puzzle page.
+
+Date: ${readable}
+Today's lineup: ${lineup}
+
+Return ONLY a JSON object, no markdown fences and no preamble, with these keys:
+- "greeting": one sentence, under 15 words, for high school students. Dry and warm, never peppy. No exclamation marks.
+- "tipFor": exactly one of: ${types.map((t) => `"${t}"`).join(', ')}
+- "tip": one solving strategy for that puzzle type, under 30 words, concrete and actionable. Describe a technique, not encouragement.
+- "noteTitle": two or three words.
+- "note": one interesting sentence about mathematics, under 30 words. Something a 16-year-old would find genuinely surprising. Not a motivational quote.
+
+Do not reference specific puzzle contents; you have not seen them.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    const data = await res.json();
+    const text = data.content
+      .map((b) => (b.type === 'text' ? b.text : ''))
+      .join('')
+      .replace(/```json|```/g, '')
+      .trim();
+    const parsed = JSON.parse(text);
+    if (!parsed.greeting || !parsed.tip) throw new Error('missing required keys');
+    if (!types.includes(parsed.tipFor)) parsed.tipFor = types[0];
+    console.log(`  copy: generated with ${MODEL}`);
+    return { ...parsed, source: MODEL };
+  } catch (err) {
+    console.warn(`  copy: API call failed (${err.message}); using fallback`);
+    return fallbackCopy(dk, types);
+  }
+}
 
 function addDays(dk, n) {
   const d = new Date(`${dk}T00:00:00Z`);
@@ -154,7 +257,7 @@ function verify(set) {
   return [...new Set(problems)];
 }
 
-function buildOne(dk, { force = false } = {}) {
+async function buildOne(dk, { force = false } = {}) {
   const out = join(PUZZLE_DIR, `${dk}.json`);
   if (existsSync(out) && !force) {
     console.log(`= ${dk} already exists, skipping`);
@@ -163,6 +266,9 @@ function buildOne(dk, { force = false } = {}) {
 
   const started = Date.now();
   const set = buildDailySet(dk, { vocab, words5 });
+  // Written into the day's file rather than produced at page-build time: the
+  // page is now a static shell and never knows which date it will show.
+  set.copy = await fetchCopy(dk, set.puzzles);
   const problems = verify(set);
   if (problems.length) {
     console.error(`FAILED ${dk}:`);
@@ -181,14 +287,27 @@ function buildOne(dk, { force = false } = {}) {
 const args = process.argv.slice(2);
 const force = args.includes('--force');
 const daysFlag = args.indexOf('--days');
-const days = daysFlag === -1 ? 1 : Number(args[daysFlag + 1]);
+const days = daysFlag === -1 ? DEFAULT_DAYS : Number(args[daysFlag + 1]);
 const explicit = args.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
 const start = explicit ?? dateKey(new Date(), TZ);
 
-for (let i = 0; i < days; i++) buildOne(addDays(start, i), { force });
+for (let i = 0; i < days; i++) await buildOne(addDays(start, i), { force });
 
-// Index of available days, so a site can list or link past puzzles.
-const { readdirSync } = await import('node:fs');
+// Prune days that have fallen out of the picker's window. Old puzzles aren't
+// worth retaining and the archive of rendered HTML was the bulk of repo growth.
+const { readdirSync, rmSync } = await import('node:fs');
+const todayKey = dateKey(new Date(), TZ);
+const cutoff = addDays(todayKey, -KEEP_PAST);
+let pruned = 0;
+for (const f of readdirSync(PUZZLE_DIR)) {
+  const m = /^(\d{4}-\d{2}-\d{2})\.json$/.exec(f);
+  if (!m || m[1] >= cutoff) continue;
+  rmSync(join(PUZZLE_DIR, f));
+  pruned++;
+}
+if (pruned) console.log(`  pruned ${pruned} day(s) older than ${cutoff}`);
+
+// Index of available days, so the page can pick a date and list recent ones.
 const available = readdirSync(PUZZLE_DIR)
   .filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f))
   .map((f) => f.replace('.json', ''))

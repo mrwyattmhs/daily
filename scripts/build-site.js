@@ -1,236 +1,28 @@
 #!/usr/bin/env node
 /**
- * Build index.html for one day.
+ * Build index.html.
  *
- *   node scripts/build-site.js              # today
- *   node scripts/build-site.js 2026-09-01
+ * The page is a date-agnostic shell. It carries the stylesheet and a bootstrap
+ * script; the date, the puzzles and the day's copy are all fetched at load time
+ * from the files in puzzles/.
  *
- * Puzzle data is read from puzzles/YYYY-MM-DD.json and rendered locally. The
- * Anthropic API is used only for the day's short written copy — the greeting,
- * one strategy tip, and a math note.
+ * That decoupling is the point: the site rolls over at midnight Eastern on its
+ * own, so a late or skipped workflow run no longer leaves yesterday's puzzles
+ * up. The nightly job only tops up the buffer.
  *
- * Puzzle data is deliberately never sent to the model. It would cost tokens on
- * every build, and a model reformatting a grid could only ever make it worse.
+ * This output does not depend on any date, so running it twice produces an
+ * identical file and the commit step no-ops.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { dateKey } from '../v1/index.js';
-import { renderPuzzle } from '../v1/render/svg.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const TZ = process.env.PUZZLE_TZ || 'America/New_York';
-const MODEL = process.env.PUZZLE_MODEL || 'claude-haiku-4-5-20251001';
 
 const SITE_TITLE = process.env.PUZZLE_SITE_TITLE || 'Daily Puzzles';
-const SITE_BYLINE = process.env.PUZZLE_SITE_BYLINE || 'Mr. Wyatt · Mathematics';
 
-/* ---------- the day's copy ---------- */
-
-const COUNT_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight'];
-
-/** Spell a small count, so copy reads naturally and can't go stale. */
-function countWord(n) {
-  return COUNT_WORDS[n] ?? String(n);
-}
-
-/**
- * Deterministic fallback copy. Used when no API key is set or the call fails,
- * so a build never breaks over a missing greeting.
- */
-function fallbackCopy(dk, types) {
-  const tips = {
-    sudoku: 'Scan for the digit that appears most often already — it usually has one forced home left.',
-    shikaku: 'Start with prime numbers. A 5 or a 7 can only be a 1-wide strip, so its shape is fixed.',
-    slitherlink:
-      'A 0 is the strongest clue on the board. Mark all four of its sides as empty before anything else.',
-    wordsearch: 'Hunt for uncommon letters first — one X or Q narrows a word to a couple of places.',
-  };
-  const day = Math.floor(Date.parse(`${dk}T00:00:00Z`) / 86400000);
-  const pick = types[day % types.length];
-  return {
-    // Derived, not hardcoded: this line said "Four puzzles" for a week after a
-    // fifth was added.
-    greeting: `${countWord(types.length)} puzzles. Pencil optional, patience required.`,
-    tipFor: pick,
-    tip: tips[pick] ?? tips.sudoku,
-    noteTitle: 'Today',
-    note: 'Every grid below was checked for a single solution before it was published.',
-    source: 'fallback',
-  };
-}
-
-async function fetchCopy(dk, puzzles) {
-  const key = process.env.ANTHROPIC_API_KEY;
-  const types = puzzles.map((p) => p.type);
-  if (!key) {
-    console.log('  copy: no ANTHROPIC_API_KEY, using fallback');
-    return fallbackCopy(dk, types);
-  }
-
-  const readable = new Date(`${dk}T12:00:00Z`).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    timeZone: 'UTC',
-  });
-  const lineup = puzzles.map((p) => `${p.type} (${p.difficulty})`).join(', ');
-
-  const prompt = `You write the daily copy for a high school math teacher's puzzle page.
-
-Date: ${readable}
-Today's lineup: ${lineup}
-
-Return ONLY a JSON object, no markdown fences and no preamble, with these keys:
-- "greeting": one sentence, under 15 words, for high school students. Dry and warm, never peppy. No exclamation marks.
-- "tipFor": exactly one of: ${types.map((t) => `"${t}"`).join(', ')}
-- "tip": one solving strategy for that puzzle type, under 30 words, concrete and actionable. Describe a technique, not encouragement.
-- "noteTitle": two or three words.
-- "note": one interesting sentence about mathematics, under 30 words. Something a 16-year-old would find genuinely surprising. Not a motivational quote.
-
-Do not reference specific puzzle contents; you have not seen them.`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-    const data = await res.json();
-    const text = data.content
-      .map((b) => (b.type === 'text' ? b.text : ''))
-      .join('')
-      .replace(/```json|```/g, '')
-      .trim();
-    const parsed = JSON.parse(text);
-    if (!parsed.greeting || !parsed.tip) throw new Error('missing required keys');
-    if (!types.includes(parsed.tipFor)) parsed.tipFor = types[0];
-    console.log(`  copy: generated with ${MODEL}`);
-    return { ...parsed, source: MODEL };
-  } catch (err) {
-    console.warn(`  copy: API call failed (${err.message}); using fallback`);
-    return fallbackCopy(dk, types);
-  }
-}
-
-/* ---------- page ---------- */
-
-function esc(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-}
-
-const LABELS = {
-  sudoku: { name: 'Sudoku', rule: 'Every row, column, and 3×3 box holds 1 through 9.' },
-  shikaku: {
-    name: 'Rectangles',
-    rule: 'Divide the grid into rectangles. Each holds one number, equal to its area.',
-  },
-  slitherlink: {
-    name: 'Loop',
-    rule: 'Draw one closed loop on the grid lines. A number counts how many of that cell’s sides it uses.',
-  },
-  wordsearch: { name: 'Word search', rule: 'Any direction, including backwards and diagonal.' },
-  wordle: {
-    name: 'Word guess',
-    rule: 'Guess the five-letter word in six tries. Any five letters are accepted.',
-  },
-};
-
-function puzzleSection(p, index, tip) {
-  const label = LABELS[p.type] ?? { name: p.type, rule: '' };
-  const id = `p-${p.type}`;
-  const meta = [];
-  if (p.type === 'sudoku') meta.push(`${p.clues} clues`);
-  if (p.type === 'shikaku') meta.push(`${p.clues.length} rectangles`);
-  if (p.type === 'slitherlink') meta.push(`${p.stats.clueCount} clues`);
-  if (p.type === 'wordsearch') meta.push(`${p.words.length} terms`);
-  if (p.type === 'wordle') meta.push(`${p.maxGuesses} tries`);
-  if (p.theme) meta.push(p.theme);
-
-  const wordList =
-    p.type === 'wordsearch'
-      ? `<ul class="wordlist">${p.words
-          .slice()
-          .sort((a, b) => a.localeCompare(b))
-          .map((w) => `<li>${esc(w)}</li>`)
-          .join('')}</ul>`
-      : '';
-
-  // Every other puzzle ships static SVG for print and no-JS. A word guess has
-  // nothing to draw — the board is blank until someone plays, and printing the
-  // answer would defeat it — so it gets a plain notice instead.
-  const fallback =
-    p.type === 'wordle'
-      ? `<figure class="pz-fallback grid-wrap">
-    <p class="pz-nojs">This one needs JavaScript, and there's nothing to print — the board fills in as you guess.</p>
-  </figure>`
-      : `<figure class="pz-fallback grid-wrap" data-solved="false">
-    <div class="grid-layer grid-puzzle">${renderPuzzle(p, { showSolution: false })}</div>
-    <div class="grid-layer grid-answer">${renderPuzzle(p, { showSolution: true })}</div>
-    ${wordList}
-    <button class="reveal" type="button" aria-expanded="false" data-target="${id}">Show solution</button>
-  </figure>`;
-
-  return `
-<section class="sheet" id="${id}" data-sheet="${esc(p.type)}">
-  <header class="sheet-head">
-    <p class="sheet-index">Sheet ${String(index + 1).padStart(2, '0')}</p>
-    <h2 class="sheet-title">${esc(label.name)}</h2>
-    <p class="sheet-meta"><span class="chip chip-${esc(p.difficulty)}">${esc(p.difficulty)}</span>${meta
-      .map((m) => `<span>${esc(m)}</span>`)
-      .join('')}</p>
-    <p class="sheet-rule">${label.rule}</p>
-  </header>
-  ${tip ? `<aside class="tip"><span class="tip-label">Try this</span><p>${esc(tip)}</p></aside>` : ''}
-  <div class="pz-play" data-play-slot="${esc(p.type)}"></div>
-  ${fallback}
-</section>`;
-}
-
-function page(set, copy) {
-  const dk = set.date;
-  const d = new Date(`${dk}T12:00:00Z`);
-  const weekday = d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
-  const rest = d.toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-
-  const sections = set.puzzles
-    .map((p, i) => puzzleSection(p, i, copy.tipFor === p.type ? copy.tip : null))
-    .join('\n');
-
-  const nav = set.puzzles
-    .map((p) => `<a href="#p-${p.type}">${esc((LABELS[p.type] ?? { name: p.type }).name)}</a>`)
-    .join('');
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(SITE_TITLE)} · ${esc(rest)}</title>
-<meta name="description" content="${esc(countWord(set.puzzles.length))} puzzles for ${esc(rest)}: ${esc(
-    set.puzzles.map((p) => (LABELS[p.type] ?? { name: p.type }).name.toLowerCase()).join(', '),
-  )}.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="v1/play/play.css">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
-<style>
-:root {
+const CSS = String.raw`:root {
   --paper: #eeeff2;
   --paper-deep: #e3e5ea;
   --ink: #1f1e24;
@@ -475,6 +267,17 @@ body::before {
 
 /* ---- note + footer ---- */
 
+.stale-note {
+  margin: 0 0 1.5rem;
+  padding: 0.7rem 0.95rem;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--flag);
+  background: var(--paper-deep);
+  border-left: 3px solid var(--flag);
+}
+
 .note { padding: 2.5rem 0; border-top: 2px solid var(--ink); }
 .note h2 {
   font-family: var(--mono);
@@ -513,78 +316,88 @@ body::before {
   .grid-wrap[data-solved="true"] .grid-puzzle { display: block; }
   .puzzle-svg { max-width: 15.5cm; }
 }
+/* ---- client-rendered shell ---- */
+
+.boot {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 6rem 1.25rem;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.boot-error h1 {
+  font-family: var(--display);
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.5rem;
+  color: var(--ink);
+}
+
+.daypick-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.daypick {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 0.2rem 0.35rem;
+}
+
+.stale-note a { color: inherit; }
+
+@media print {
+  .daypick-wrap { display: none; }
+}
+`;
+
+const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${SITE_TITLE}</title>
+<meta name="description" content="Five hand-checked math puzzles every school day: sudoku, rectangles, loop, word search and a word guess.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="v1/play/play.css">
+<style>
+${CSS}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-<header class="masthead">
-  <p class="masthead-byline">${esc(SITE_BYLINE)}</p>
-  <h1 class="datestamp">
-    <span class="weekday">${esc(weekday)}</span>
-    <span class="rest">${esc(rest)}</span>
-  </h1>
-  <p class="greeting">${esc(copy.greeting)}</p>
-  <div data-trophy-slot></div>
-</header>
-
-<nav class="index-bar" aria-label="Puzzles">${nav}</nav>
-
-<main>
-${sections}
-</main>
-
-<section class="note">
-  <h2>${esc(copy.noteTitle || 'Note')}</h2>
-  <p>${esc(copy.note || '')}</p>
-</section>
-
-<footer class="foot">
-  <p>Built ${esc(set.generatedAt.slice(0, 16).replace('T', ' '))} UTC · library ${esc(set.version)} · copy ${esc(copy.source)}</p>
-  <p>Every grid is checked for a single solution before publishing.</p>
-  <p>Pull today's puzzles as data: <code>puzzles/${esc(dk)}.json</code> · <a href="puzzles/index.json">all dates</a></p>
-</footer>
-
+<div id="app">
+  <div class="boot">
+    <noscript>
+      These puzzles are interactive and are built in your browser, so JavaScript
+      needs to be on. Everything else about the page works offline once loaded.
+    </noscript>
+  </div>
 </div>
-<script type="application/json" id="puzzle-data">${JSON.stringify(set).replace(/</g, '\\u003c')}</script>
-<script>
-// Fallback controls: these run whether or not the interactive layer loads.
-for (const button of document.querySelectorAll('.reveal')) {
-  button.addEventListener('click', () => {
-    const figure = document.getElementById(button.dataset.target).querySelector('.grid-wrap');
-    const solved = figure.dataset.solved === 'true';
-    figure.dataset.solved = String(!solved);
-    button.setAttribute('aria-expanded', String(!solved));
-    button.textContent = solved ? 'Show solution' : 'Hide solution';
-  });
-}
-</script>
+
 <script type="module">
-import { hydrate } from './v1/play/index.js';
-hydrate();
+import { boot } from './v1/play/page.js';
+boot();
 </script>
+
 </body>
 </html>
 `;
-}
-
-/* ---------- main ---------- */
-
-const explicit = process.argv.slice(2).find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
-const dk = explicit ?? dateKey(new Date(), TZ);
-const puzzleFile = join(ROOT, 'puzzles', `${dk}.json`);
-
-if (!existsSync(puzzleFile)) {
-  console.error(`No puzzles for ${dk}. Run: node scripts/generate-daily.js ${dk}`);
-  process.exit(1);
-}
-
-const set = JSON.parse(readFileSync(puzzleFile, 'utf8'));
-const copy = await fetchCopy(dk, set.puzzles);
-const html = page(set, copy);
 
 writeFileSync(join(ROOT, 'index.html'), html);
-mkdirSync(join(ROOT, 'archive'), { recursive: true });
-writeFileSync(join(ROOT, 'archive', `${dk}.html`), html);
-
-console.log(`  built index.html + archive/${dk}.html (${(html.length / 1024).toFixed(1)} KB)`);
+console.log(`  built index.html shell (${(html.length / 1024).toFixed(1)} KB)`);

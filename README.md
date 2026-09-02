@@ -12,7 +12,13 @@ All five are playable in the browser, on desktop and touch, with progress saved
 locally. The page also ships a static version of every puzzle, so it still
 prints and still works with JavaScript off.
 
+The page is a **date-agnostic shell**. It reads the reader's date on load and
+fetches from a 30-day buffer of pre-generated puzzle files, so the day rolls
+over at midnight Eastern whether or not the nightly job ran. The workflow has no
+deadline — it only tops the buffer up.
+
 - Today's page: `https://mrwyattmhs.github.io/daily/`
+- A specific day: `https://mrwyattmhs.github.io/daily/?date=2026-09-08` (past days only appear in the picker)
 - Today's data: `https://mrwyattmhs.github.io/daily/puzzles/YYYY-MM-DD.json`
 - Library: `https://mrwyattmhs.github.io/daily/v1/index.js`
 
@@ -115,6 +121,14 @@ can be *lost*, so there is nothing to check mid-solve. Progress is written to
 localStorage keyed by date and puzzle, and is discarded automatically if the
 puzzle for that date changes.
 
+### Day picker
+
+The nav bar carries a dropdown of the **last 7 days**. Future days are
+deliberately not listed. They are still fetchable by URL — anyone reading the
+source can find them — which is an accepted trade for the punctuality the buffer
+buys. Today's solutions are in the page source too, so the bar has always been
+"casual peeking", not security.
+
 ### Solve tally and celebration
 
 `v1/play/progress.js` keeps a record of solved puzzles in localStorage, and
@@ -128,8 +142,9 @@ cannot reach full completion. Recording is idempotent, because completion checks
 run on every keystroke.
 
 Clearing every puzzle on a page fires `celebrate()` from
-`v1/play/celebrate.js`: a canvas of fireworks in the page's accent colours plus
-a brief stamp. It fires **once per date** — a `celebrated` flag stops a
+`v1/play/celebrate.js`: fourteen shells that climb from the bottom of the
+screen, burst, and throw sparks with trails, over about seven seconds, in the
+page's accent colours plus a brief stamp. It fires **once per date** — a `celebrated` flag stops a
 returning visitor getting fireworks on every load — and is keyed to the page's
 date, so an archived day celebrates that day.
 
@@ -211,35 +226,36 @@ cached freely and every visitor sees the same puzzle. Generators never call
 
 ## Schedule
 
-`.github/workflows/daily.yml` runs on three staggered slots. GitHub cron is UTC
-only and ignores daylight saving, so these are pinned to the summer offsets for
-4am / 5am / 6am Eastern:
+`.github/workflows/daily.yml` runs at 08:09 and 14:23 UTC, plus on any push to
+`v1/**` or `scripts/**`.
 
-| Slot | Summer (EDT) | Winter (EST) |
-| --- | --- | --- |
-| 08:09 UTC | 04:09 | 03:09 |
-| 09:14 UTC | 05:14 | 04:14 |
-| 10:17 UTC | 06:17 | 05:17 |
+**Neither slot is a deadline.** The page resolves its own date from the
+committed buffer, so a run that is hours late, or skipped, or skipped for a
+fortnight, doesn't affect what students see in the morning. Two slots are cheap
+redundancy for topping the buffer up, nothing more.
 
-In winter each lands an hour earlier, which stays inside the window, so no DST
-handling is needed. Minutes are staggered and off the hour, where GitHub's queue
-is most congested.
+Generation skips days whose files already exist, so a repeat run takes a second
+or two and commits nothing. There is no skip guard and **no `date` input**: that
+input caused a long-running bug, because re-running an old workflow run replays
+its original inputs, so a re-run kept rebuilding a weeks-old day and putting it
+back on the site. With the page choosing its own date, the input had nothing
+useful to do, so it's gone and the bug is structurally impossible.
 
-These slots are **redundancy, not speed**. GitHub delays each scheduled trigger
-independently, so extra slots don't make any one of them earlier — they cover a
-dropped or very late earlier slot. Whichever runs first publishes; the rest see
-`archive/<date>.html` already committed and exit in seconds, and the
-`concurrency` group means overlapping runs queue rather than race.
+To regenerate existing files after changing a generator, dispatch manually with
+**force** ticked.
 
-There's also a `push` trigger on `v1/**` and `scripts/**`, so a code change
-rebuilds immediately instead of waiting for tomorrow. It can't loop: commits
-made with `GITHUB_TOKEN` don't trigger workflow runs.
+### Buffer
 
-Each run also generates 15 days ahead. Today's puzzles were almost certainly
-written a fortnight ago, so a slow seed can never delay publishing.
+30 days ahead, 7 days behind, about 16KB per day — roughly half a megabyte
+total. Days older than the 7-day window are pruned automatically.
 
-Difficulty follows the school week: easier Monday and Tuesday, hardest Friday.
-Change the `ramp` array in `v1/index.js` to adjust.
+The buffer is a sliding window, not a batch: each run generates 30 days starting
+from the day it runs, so it refills from the front continuously. It only drains
+if the job stops running for 30 consecutive days. If it ever does empty, the
+page shows the most recent day it has, with a notice, rather than an error.
+
+Rendered HTML is no longer archived per day. That folder was 113KB a day and the
+bulk of repo growth; the buffer is the only stored state now.
 
 ## Token cost
 
@@ -292,8 +308,12 @@ above it.
 | Folder | Role | Depends on |
 | --- | --- | --- |
 | `v1/generators/` | Produce puzzle data. No DOM, no styling. | nothing |
-| `v1/render/` | Static SVG for print and no-JS. | generator output |
+| `v1/render/` | Static SVG, used for print and as a mount fallback. | generator output |
 | `v1/play/` | Interactive boards, tally, celebration. | generator output |
+
+Note that the page itself is now built in the browser by `v1/play/page.js`, so
+JavaScript is required to see any puzzles. Printing still works normally, since
+browsers run JavaScript; a reader with scripting disabled gets a short notice.
 
 The word guess is the one puzzle with no static form — its board is empty until
 someone plays and printing the answer would defeat it — so it shows a short

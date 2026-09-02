@@ -11,11 +11,14 @@
  *    never flashes. Rare, but the mitigation is free.
  */
 
-const DURATION = 4200;
-const SHELLS = 7;
-const PARTICLES_PER_SHELL = 46;
-// Hard ceiling so a mid-range phone doesn't stutter.
-const MAX_PARTICLES = 420;
+const DURATION = 7000;
+const SHELLS = 14;
+const PARTICLES_PER_SHELL = 58;
+// Hard ceiling so a mid-range phone doesn't stutter. Trails are counted here
+// too, so this is the total live particle budget, not just burst fragments.
+const MAX_PARTICLES = 900;
+// Fraction of burst fragments that leave a short trail behind them.
+const TRAIL_CHANCE = 0.5;
 
 /** Pull the page's accent colours so this looks designed, not bolted on. */
 function palette() {
@@ -79,24 +82,39 @@ export function celebrate(opts = {}) {
   const width = () => canvas.width;
   const height = () => canvas.height;
 
-  /** @type {{x:number,y:number,vx:number,vy:number,life:number,max:number,color:string,size:number}[]} */
+  /** @type {{x:number,y:number,vx:number,vy:number,life:number,max:number,color:string,size:number,trail:boolean}[]} */
   let particles = [];
+  /** Rockets climbing toward their burst height. */
+  let rockets = [];
   const shells = [];
 
-  // Spread launches across the run and across the screen, so it reads as
-  // fireworks rather than one burst.
+  // Spread launches across the run and across the screen, so it reads as a
+  // display rather than one big bang. Two or three overlap at the peak.
   for (let i = 0; i < SHELLS; i++) {
     shells.push({
-      at: (i / SHELLS) * (DURATION * 0.55) + Math.random() * 220,
-      x: (0.12 + Math.random() * 0.76) * width(),
-      y: (0.18 + Math.random() * 0.4) * height(),
+      at: (i / SHELLS) * (DURATION * 0.72) + Math.random() * 260,
+      x: (0.08 + Math.random() * 0.84) * width(),
+      y: (0.12 + Math.random() * 0.42) * height(),
       fired: false,
     });
   }
 
-  function burst(x, y) {
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    const speed = (5.5 + Math.random() * 3.5) * ratio;
+  /** A rocket climbing from the bottom edge, trailing sparks as it goes. */
+  function launch(shell) {
+    const colour = colors[Math.floor(Math.random() * colors.length)];
+    rockets.push({
+      x: shell.x,
+      y: height() * 1.02,
+      targetY: shell.y,
+      // Tuned so the climb reads as roughly half a second.
+      vy: -(height() * 0.02) * (0.85 + Math.random() * 0.3),
+      colour,
+    });
+  }
+
+  function burst(x, y, forced) {
+    const color = forced ?? colors[Math.floor(Math.random() * colors.length)];
+    const speed = (6.5 + Math.random() * 4.5) * ratio;
     for (let i = 0; i < PARTICLES_PER_SHELL; i++) {
       if (particles.length >= MAX_PARTICLES) break;
       // Jittered angles: a perfectly even ring looks mechanical.
@@ -111,7 +129,8 @@ export function celebrate(opts = {}) {
         life: 0,
         max,
         color,
-        size: (1.6 + Math.random() * 1.9) * ratio,
+        size: (1.7 + Math.random() * 2.1) * ratio,
+        trail: Math.random() < TRAIL_CHANCE,
       });
     }
   }
@@ -126,9 +145,32 @@ export function celebrate(opts = {}) {
     for (const shell of shells) {
       if (!shell.fired && elapsed >= shell.at) {
         shell.fired = true;
-        burst(shell.x, shell.y);
+        launch(shell);
       }
     }
+
+    // Climb, spark, then burst on arrival.
+    for (const r of rockets) {
+      r.y += r.vy;
+      r.vy *= 0.988;
+      if (particles.length < MAX_PARTICLES && Math.random() < 0.7) {
+        particles.push({
+          x: r.x + (Math.random() - 0.5) * 2 * ratio,
+          y: r.y,
+          vx: (Math.random() - 0.5) * 0.6 * ratio,
+          vy: Math.random() * 0.5 * ratio,
+          life: 0,
+          max: 260,
+          color: r.colour,
+          size: 1.3 * ratio,
+          trail: false,
+        });
+      }
+    }
+    for (const r of rockets) {
+      if (r.y <= r.targetY) burst(r.x, r.y, r.colour);
+    }
+    rockets = rockets.filter((r) => r.y > r.targetY);
 
     // Clear fully each frame. Trailing via a translucent fill would leave a
     // haze over the page and dim the text underneath.
@@ -145,7 +187,22 @@ export function celebrate(opts = {}) {
       const t = p.life / p.max;
       if (t >= 1) continue;
       // Fade on a curve so particles die out gently instead of blinking off.
-      ctx.globalAlpha = Math.max(0, 1 - t * t);
+      const alpha = Math.max(0, 1 - t * t);
+
+      if (p.trail) {
+        // A short streak along the direction of travel reads as a spark rather
+        // than a dot, and costs one extra stroke.
+        ctx.globalAlpha = alpha * 0.4;
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = p.size * 0.9;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 2.2, p.y - p.vy * 2.2);
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = alpha;
       ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
@@ -155,7 +212,7 @@ export function celebrate(opts = {}) {
 
     particles = particles.filter((p) => p.life < p.max);
 
-    if (elapsed < DURATION || particles.length) {
+    if (elapsed < DURATION || particles.length || rockets.length) {
       raf = requestAnimationFrame(frame);
     } else {
       cleanup();
